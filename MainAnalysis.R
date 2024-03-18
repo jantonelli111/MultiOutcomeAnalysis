@@ -1,3 +1,5 @@
+library(arrow)
+
 rm(list=ls())
 
 ## Read in main function needed for analysis
@@ -8,8 +10,8 @@ require(earth)
 require(MASS)
 require(psych)
 
-## Read in fake data
-dataOriginal = read.csv("Data/outcomes_merged_all_years.csv")
+## Read data
+dataOriginal = read_parquet("data/processed/outcomes_merged_all_years.parquet")
 
 ## Convert all variables to numeric (some are integers)
 data = data.frame(sapply(dataOriginal, as.numeric))
@@ -43,7 +45,7 @@ for (tempZip in uniqueZips) {
         length(wPast) == 1 &
         length(wFuture) == 1) {
       
-      data$PriorMortality[wCurrent] = data$death_rate[wPast]
+      data$PriorMortality[wCurrent] = data$mort_rate[wPast]
       data$PriorCOPD[wCurrent] = data$copd_rate[wPast]
       
       data$FutureOzone[wCurrent] = data$ozone[wFuture]
@@ -73,13 +75,13 @@ variablesOfInterest = c("zip",
                         "no3",
                         "oc",
                         "so4",
-                        "death_rate",
-                        "female_percentage",
-                        "dual_percentage",
+                        "mort_rate",
+                        "female_pct",
+                        "dual_pct",
                         "mean_age",
-                        "percentage_race_labelBlack",
-                        "percentage_race_labelWhite",
-                        "percentage_race_labelHispanic",
+                        "race_white_pct",
+                        "race_black_pct",
+                        "race_hispanic_pct",
                         "anemia_rate",
                         "copd_rate",
                         "stroke_rate",

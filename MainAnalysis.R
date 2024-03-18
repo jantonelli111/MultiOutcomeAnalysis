@@ -101,7 +101,7 @@ wNotNA = which(complete.cases(data[,variablesOfInterest]) == TRUE)
 finalData = data[wNotNA,]
 
 ## Now create variables needed for our analysis
-Y = finalData[,c("death_rate",
+Y = finalData[,c("mort_rate",
                  "anemia_rate",
                  "copd_rate",
                  "stroke_rate",
@@ -133,12 +133,12 @@ X = finalData[,c("year",
                  "winter_tmmx",
                  "summer_rmax",
                  "winter_rmax",
-                 "female_percentage",
-                 "dual_percentage",
+                 "female_pct",
+                 "dual_pct",
                  "mean_age",
-                 "percentage_race_labelBlack",
-                 "percentage_race_labelWhite",
-                 "percentage_race_labelHispanic")]
+                 "race_white_pct",
+                 "race_black_pct",
+                 "race_hispanic_pct")]
 
 t1 = c(apply(Tr[,1:7], 2, quantile, 0.75), apply(Tr[,8:9], 2, median))
 t2 = c(apply(Tr[,1:7], 2, quantile, 0.25), apply(Tr[,8:9], 2, median))

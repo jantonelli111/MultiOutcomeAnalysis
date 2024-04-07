@@ -41,7 +41,7 @@ colnames(df)
 write_parquet(df, "data/processed/outcomes_merged_all_years.parquet")
 
 # compare columns with fake data
-fake_df <- read_csv("data/fake_outcomes_merged_all_years.csv")
+fake_df <- read_csv("data/outcomes_merged_all_years.csv")
 dim(fake_df)
 colnames(fake_df)
 # [1] "zip"                                        "year"                                       "pm25_ensemble"                              "mean_bmi"                                  

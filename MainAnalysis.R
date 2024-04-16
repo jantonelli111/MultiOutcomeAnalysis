@@ -721,7 +721,7 @@ A3 = list(Y = Y, Tr = Tr, X = X,
           t1NC = t1NC, t2NC = t2NC, b = b,
           maxM = m)
 
-
+source("MainFunctions.R")
 system.time(
   testALL <- wrapFunc(SettingList = list(ANALYSIS0 = A0,
                                          ANALYSIS1 = A1,
@@ -731,4 +731,4 @@ system.time(
                                          nB = 50))
 )
 
-save(testALL, file="data/OutputSaved.dat")
+save(testALL, file="data/output/OutputSaved.dat")

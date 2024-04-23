@@ -95,7 +95,7 @@ if __name__ == "__main__":
                         type= str
                        )
     parser.add_argument("--sample_zips", 
-                        default = 1000, 
+                        default = 200, 
                         type= int
                        )
     parser.add_argument("--inject_missing", 

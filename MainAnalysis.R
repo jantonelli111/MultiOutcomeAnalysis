@@ -1,6 +1,13 @@
 
 rm(list=ls())
 
+# define parser arguments ----
+# args <- list()
+# args$fake <- TRUE
+parser <- ArgumentParser()
+parser$add_argument("--fake", action = "store_true", help = "use fake data")               
+args = parser$parse_args()
+
 ###########################################################
 ## Code for analysis of multiple treatments              ##
 ## and multiple outcomes simultaneously                  ##
@@ -25,13 +32,12 @@ require(MASS)  # for generalized inverse of matrix: ginv()
 require(psych) # for the estimation of unobserved confounders: vss(), fa.parallel()
 
 ## Read data -----
-
-## when using the fake data 
-dataOriginal = read.csv("data/aux/fake_data.csv")
-
-## when using the real data
-# library(arrow)
-# dataOriginal = arrow::read_parquet("data/data.parquet")
+if(args$fake){
+  dataOriginal = read.csv("data/aux/fake_data.csv")
+} else {
+  library(arrow)
+  dataOriginal = arrow::read_parquet("data/data.parquet")
+}
 
 ## Convert all variables to numeric (some are integers)
 data = data.frame(sapply(dataOriginal, as.numeric))
@@ -736,8 +742,8 @@ system.time(
                                          nB = 50))
 )
 
-## When using the fake data
-save(testALL, file="data/output/fake_OutputSaved.dat")
-
-## When using the real data
-#save(testALL, file="data/output/OutputSaved.dat")
+if(args$fake){
+  save(testALL, file="data/output/fake_OutputSaved.dat")
+} else {
+  save(testALL, file="data/output/OutputSaved.dat")
+}

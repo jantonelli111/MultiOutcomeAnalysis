@@ -61,9 +61,9 @@ for (tempZip in uniqueZips) {
     wCurrent = which(data$zip == tempZip &
                        data$year == tempYear)
     wPast = which(data$zip == tempZip &
-                    data$year == tempYear-3)
+                    data$year == tempYear-1)
     wFuture = which(data$zip == tempZip &
-                      data$year == tempYear+3)
+                      data$year == tempYear+1)
     
     ## only proceed if each of these is in the data set
     if (length(wCurrent) == 1 &
@@ -191,7 +191,7 @@ for (tt in 2 : 8) {
   t1[[tt]] = apply(Tr, 2, median)
   t1[[tt]][tt-1] = quantile(Tr[,tt-1], 0.75)
   t2[[tt]] = apply(Tr, 2, median)
-  t2[[tt]][tt-1] = quantile(Tr[,tt-1], 0.35)
+  t2[[tt]][tt-1] = quantile(Tr[,tt-1], 0.25)
 }
 
 ## Negative control outcomes
@@ -297,7 +297,7 @@ for (tt in 2 : 8) {
   t1[[tt]] = apply(Tr, 2, median)
   t1[[tt]][tt-1] = quantile(Tr[,tt-1], 0.75)
   t2[[tt]] = apply(Tr, 2, median)
-  t2[[tt]][tt-1] = quantile(Tr[,tt-1], 0.35)
+  t2[[tt]][tt-1] = quantile(Tr[,tt-1], 0.25)
 }
 
 ## Negative control outcomes
@@ -451,7 +451,7 @@ for (tt in 2 : 8) {
   t1[[tt]] = apply(Tr, 2, median)
   t1[[tt]][tt-1] = quantile(Tr[,tt-1], 0.75)
   t2[[tt]] = apply(Tr, 2, median)
-  t2[[tt]][tt-1] = quantile(Tr[,tt-1], 0.35)
+  t2[[tt]][tt-1] = quantile(Tr[,tt-1], 0.25)
 }
 
 ## Negative control outcomes
@@ -672,7 +672,7 @@ for (tt in 2 : 8) {
   t1[[tt]] = apply(Tr, 2, median)
   t1[[tt]][tt-1] = quantile(Tr[,tt-1], 0.75)
   t2[[tt]] = apply(Tr, 2, median)
-  t2[[tt]][tt-1] = quantile(Tr[,tt-1], 0.35)
+  t2[[tt]][tt-1] = quantile(Tr[,tt-1], 0.25)
 }
 
 ## Negative control outcomes
@@ -736,4 +736,8 @@ system.time(
                                          nB = 50))
 )
 
-save(testALL, file="data/output/OutputSaved.dat")
+## When using the fake data
+save(testALL, file="data/output/fake_OutputSaved.dat")
+
+## When using the real data
+#save(testALL, file="data/output/OutputSaved.dat")

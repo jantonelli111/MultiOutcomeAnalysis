@@ -24,9 +24,14 @@ require(earth) # for nonlinear multivariate regression model (MARS; Friedman, 19
 require(MASS)  # for generalized inverse of matrix: ginv()
 require(psych) # for the estimation of unobserved confounders: vss(), fa.parallel()
 
-## Read in fake data
-dataOriginal = read.csv("data/outcomes_merged_all_years.csv")
-#dataOriginal = read.csv("C:/Users/suyeon.kang/Dropbox (UFL)/UF Research/outcomes_merged_all_years.csv")
+## Read data -----
+
+## when using the fake data 
+dataOriginal = read.csv("data/aux/fake_data.csv")
+
+## when using the real data
+# library(arrow)
+# dataOriginal = arrow::read_parquet("data/data.parquet")
 
 ## Convert all variables to numeric (some are integers)
 data = data.frame(sapply(dataOriginal, as.numeric))
@@ -101,12 +106,12 @@ variablesOfInterest = c("zip",
                         "oc",
                         "so4",
                         "death_rate",
-                        "female_percentage",
-                        "dual_percentage",
+                        "female_pct",
+                        "dual_pct",
                         "mean_age",
-                        "percentage_race_labelBlack",
-                        "percentage_race_labelWhite",
-                        "percentage_race_labelHispanic",
+                        "race_black_pct",
+                        "race_white_pct",
+                        "race_hispanic_pct",
                         "anemia_rate",
                         "copd_rate",
                         "stroke_rate",
@@ -169,12 +174,12 @@ X = finalData[,c("year",
                  "winter_tmmx",
                  "summer_rmax",
                  "winter_rmax",
-                 "female_percentage",
-                 "dual_percentage",
+                 "female_pct",
+                 "dual_pct",
                  "mean_age",
-                 "percentage_race_labelBlack",
-                 "percentage_race_labelWhite",
-                 "percentage_race_labelHispanic")]
+                 "race_black_pct",
+                 "race_white_pct",
+                 "race_hispanic_pct")]
 
 ## estimand of interest
 t1 = list()
@@ -275,12 +280,12 @@ X = finalData[,c("year",
                  "winter_tmmx",
                  "summer_rmax",
                  "winter_rmax",
-                 "female_percentage",
-                 "dual_percentage",
+                 "female_pct",
+                 "dual_pct",
                  "mean_age",
-                 "percentage_race_labelBlack",
-                 "percentage_race_labelWhite",
-                 "percentage_race_labelHispanic")]
+                 "race_black_pct",
+                 "race_white_pct",
+                 "race_hispanic_pct")]
 
 ## estimand of interest
 t1 = list()
@@ -429,12 +434,12 @@ X = finalData[,c("year",
                  "winter_tmmx",
                  "summer_rmax",
                  "winter_rmax",
-                 "female_percentage",
-                 "dual_percentage",
+                 "female_pct",
+                 "dual_pct",
                  "mean_age",
-                 "percentage_race_labelBlack",
-                 "percentage_race_labelWhite",
-                 "percentage_race_labelHispanic")]
+                 "race_black_pct",
+                 "race_white_pct",
+                 "race_hispanic_pct")]
 
 ## estimand of interest
 t1 = list()
@@ -588,12 +593,12 @@ variablesOfInterest = c("zip",
                         "oc",
                         "so4",
                         "death_rate",
-                        "female_percentage",
-                        "dual_percentage",
+                        "female_pct",
+                        "dual_pct",
                         "mean_age",
-                        "percentage_race_labelBlack",
-                        "percentage_race_labelWhite",
-                        "percentage_race_labelHispanic",
+                        "race_black_pct",
+                        "race_white_pct",
+                        "race_hispanic_pct",
                         "anemia_rate",
                         "copd_rate",
                         "stroke_rate",
@@ -650,12 +655,12 @@ X = finalData[,c("year",
                  "winter_tmmx",
                  "summer_rmax",
                  "winter_rmax",
-                 "female_percentage",
-                 "dual_percentage",
+                 "female_pct",
+                 "dual_pct",
                  "mean_age",
-                 "percentage_race_labelBlack",
-                 "percentage_race_labelWhite",
-                 "percentage_race_labelHispanic")]
+                 "race_black_pct",
+                 "race_white_pct",
+                 "race_hispanic_pct")]
 
 ## estimand of interest
 t1 = list()

@@ -1,6 +1,14 @@
 
 rm(list=ls())
 
+# define parser arguments ----
+# args <- list()
+# args$fake <- TRUE
+library(argparse)
+parser <- ArgumentParser()
+parser$add_argument("--fake", action = "store_true", help = "use fake data")               
+args = parser$parse_args()
+
 ###########################################################
 ## Code for analysis of multiple treatments              ##
 ## and multiple outcomes simultaneously                  ##
@@ -24,9 +32,13 @@ require(earth) # for nonlinear multivariate regression model (MARS; Friedman, 19
 require(MASS)  # for generalized inverse of matrix: ginv()
 require(psych) # for the estimation of unobserved confounders: vss(), fa.parallel()
 
-## Read in fake data
-dataOriginal = read.csv("data/outcomes_merged_all_years.csv")
-#dataOriginal = read.csv("C:/Users/suyeon.kang/Dropbox (UFL)/UF Research/outcomes_merged_all_years.csv")
+## Read data -----
+if(args$fake){
+  dataOriginal = read.csv("data/aux/fake_data.csv")
+} else {
+  library(arrow)
+  dataOriginal = arrow::read_parquet("data/processed/data.parquet")
+}
 
 ## Convert all variables to numeric (some are integers)
 data = data.frame(sapply(dataOriginal, as.numeric))
@@ -56,9 +68,9 @@ for (tempZip in uniqueZips) {
     wCurrent = which(data$zip == tempZip &
                        data$year == tempYear)
     wPast = which(data$zip == tempZip &
-                    data$year == tempYear-3)
+                    data$year == tempYear-1)
     wFuture = which(data$zip == tempZip &
-                      data$year == tempYear+3)
+                      data$year == tempYear+1)
     
     ## only proceed if each of these is in the data set
     if (length(wCurrent) == 1 &
@@ -101,12 +113,12 @@ variablesOfInterest = c("zip",
                         "oc",
                         "so4",
                         "death_rate",
-                        "female_percentage",
-                        "dual_percentage",
+                        "female_pct",
+                        "dual_pct",
                         "mean_age",
-                        "percentage_race_labelBlack",
-                        "percentage_race_labelWhite",
-                        "percentage_race_labelHispanic",
+                        "race_black_pct",
+                        "race_white_pct",
+                        "race_hispanic_pct",
                         "anemia_rate",
                         "copd_rate",
                         "stroke_rate",
@@ -169,12 +181,12 @@ X = finalData[,c("year",
                  "winter_tmmx",
                  "summer_rmax",
                  "winter_rmax",
-                 "female_percentage",
-                 "dual_percentage",
+                 "female_pct",
+                 "dual_pct",
                  "mean_age",
-                 "percentage_race_labelBlack",
-                 "percentage_race_labelWhite",
-                 "percentage_race_labelHispanic")]
+                 "race_black_pct",
+                 "race_white_pct",
+                 "race_hispanic_pct")]
 
 ## estimand of interest
 t1 = list()
@@ -186,7 +198,7 @@ for (tt in 2 : 8) {
   t1[[tt]] = apply(Tr, 2, median)
   t1[[tt]][tt-1] = quantile(Tr[,tt-1], 0.75)
   t2[[tt]] = apply(Tr, 2, median)
-  t2[[tt]][tt-1] = quantile(Tr[,tt-1], 0.35)
+  t2[[tt]][tt-1] = quantile(Tr[,tt-1], 0.25)
 }
 
 ## Negative control outcomes
@@ -275,12 +287,12 @@ X = finalData[,c("year",
                  "winter_tmmx",
                  "summer_rmax",
                  "winter_rmax",
-                 "female_percentage",
-                 "dual_percentage",
+                 "female_pct",
+                 "dual_pct",
                  "mean_age",
-                 "percentage_race_labelBlack",
-                 "percentage_race_labelWhite",
-                 "percentage_race_labelHispanic")]
+                 "race_black_pct",
+                 "race_white_pct",
+                 "race_hispanic_pct")]
 
 ## estimand of interest
 t1 = list()
@@ -292,7 +304,7 @@ for (tt in 2 : 8) {
   t1[[tt]] = apply(Tr, 2, median)
   t1[[tt]][tt-1] = quantile(Tr[,tt-1], 0.75)
   t2[[tt]] = apply(Tr, 2, median)
-  t2[[tt]][tt-1] = quantile(Tr[,tt-1], 0.35)
+  t2[[tt]][tt-1] = quantile(Tr[,tt-1], 0.25)
 }
 
 ## Negative control outcomes
@@ -429,12 +441,12 @@ X = finalData[,c("year",
                  "winter_tmmx",
                  "summer_rmax",
                  "winter_rmax",
-                 "female_percentage",
-                 "dual_percentage",
+                 "female_pct",
+                 "dual_pct",
                  "mean_age",
-                 "percentage_race_labelBlack",
-                 "percentage_race_labelWhite",
-                 "percentage_race_labelHispanic")]
+                 "race_black_pct",
+                 "race_white_pct",
+                 "race_hispanic_pct")]
 
 ## estimand of interest
 t1 = list()
@@ -446,7 +458,7 @@ for (tt in 2 : 8) {
   t1[[tt]] = apply(Tr, 2, median)
   t1[[tt]][tt-1] = quantile(Tr[,tt-1], 0.75)
   t2[[tt]] = apply(Tr, 2, median)
-  t2[[tt]][tt-1] = quantile(Tr[,tt-1], 0.35)
+  t2[[tt]][tt-1] = quantile(Tr[,tt-1], 0.25)
 }
 
 ## Negative control outcomes
@@ -588,12 +600,12 @@ variablesOfInterest = c("zip",
                         "oc",
                         "so4",
                         "death_rate",
-                        "female_percentage",
-                        "dual_percentage",
+                        "female_pct",
+                        "dual_pct",
                         "mean_age",
-                        "percentage_race_labelBlack",
-                        "percentage_race_labelWhite",
-                        "percentage_race_labelHispanic",
+                        "race_black_pct",
+                        "race_white_pct",
+                        "race_hispanic_pct",
                         "anemia_rate",
                         "copd_rate",
                         "stroke_rate",
@@ -650,12 +662,12 @@ X = finalData[,c("year",
                  "winter_tmmx",
                  "summer_rmax",
                  "winter_rmax",
-                 "female_percentage",
-                 "dual_percentage",
+                 "female_pct",
+                 "dual_pct",
                  "mean_age",
-                 "percentage_race_labelBlack",
-                 "percentage_race_labelWhite",
-                 "percentage_race_labelHispanic")]
+                 "race_black_pct",
+                 "race_white_pct",
+                 "race_hispanic_pct")]
 
 ## estimand of interest
 t1 = list()
@@ -667,7 +679,7 @@ for (tt in 2 : 8) {
   t1[[tt]] = apply(Tr, 2, median)
   t1[[tt]][tt-1] = quantile(Tr[,tt-1], 0.75)
   t2[[tt]] = apply(Tr, 2, median)
-  t2[[tt]][tt-1] = quantile(Tr[,tt-1], 0.35)
+  t2[[tt]][tt-1] = quantile(Tr[,tt-1], 0.25)
 }
 
 ## Negative control outcomes
@@ -731,4 +743,8 @@ system.time(
                                          nB = 50))
 )
 
-save(testALL, file="data/output/OutputSaved.dat")
+if(args$fake){
+  save(testALL, file="data/output/fake_OutputSaved.dat")
+} else {
+  save(testALL, file="data/output/OutputSaved.dat")
+}

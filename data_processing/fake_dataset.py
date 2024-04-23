@@ -39,26 +39,26 @@ def main(args):
     nrows = len(df_fake.zip)
 
     # Generate fake data
-    for field in schema:
-        x = df[field.name]
-        if field.type in ['float32', 'float64']:
-            numerical_cols.append(field.name)
-            df_fake[field.name] = np.random.default_rng().uniform(low=min(x), high=max(x), size=nrows)
+    for key, value in cols.items():
+        x = df[key]
+        if value in ['float32', 'float64']:
+            numerical_cols.append(key)
+            df_fake[key] = np.random.default_rng().uniform(low=min(x), high=max(x), size=nrows)
             missing_value = np.nan  # Suitable for numerical data
 
-        elif field.type in ['int32', 'int64']:
-            categorical_cols.append(field.name)
-            df_fake[field.name] = np.random.choice(x.dropna().unique(), size=nrows, replace=True)
+        elif value in ['int32', 'int64']:
+            categorical_cols.append(key)
+            df_fake[key] = np.random.choice(x.dropna().unique(), size=nrows, replace=True)
             missing_value = pd.NA  # pandas' nullable integer type supports pd.NA
 
-        elif field.type == 'string':
-            categorical_cols.append(field.name)
-            df_fake[field.name] = np.random.choice(x.dropna().unique(), size=nrows, replace=True)
+        elif value == 'string':
+            categorical_cols.append(key)
+            df_fake[key] = np.random.choice(x.dropna().unique(), size=nrows, replace=True)
             missing_value = None  # or "" if you prefer to use an empty string to represent missing strings
 
         else:
-            other_cols.append(field.name)
-            df_fake[field.name] = np.random.choice(x.dropna().unique(), size=nrows, replace=True)
+            other_cols.append(key)
+            df_fake[key] = np.random.choice(x.dropna().unique(), size=nrows, replace=True)
             missing_value = None  # Assuming 'None' as a generic missing value for other types
 
         # Inject the same proportion of missing values in the original data into the fake data
@@ -66,9 +66,9 @@ def main(args):
             missing_proportion = x.isnull().sum() / len(x)
             n_missing = int(missing_proportion * nrows)
             missing_indices = np.random.choice(df_fake.index, n_missing, replace=False)
-            df_fake.loc[missing_indices, field.name] = missing_value
+            df_fake.loc[missing_indices, key] = missing_value
 
-        print(f"Field: {field.name}, Type: {field.type}, Missing Proportion: {missing_proportion}")
+        print(f"Field: {key}, Type: {value}, Missing Proportion: {missing_proportion}")
 
     print("Categorical Columns:", categorical_cols)
     print("Numerical Columns:", numerical_cols)

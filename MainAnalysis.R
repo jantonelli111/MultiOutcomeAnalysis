@@ -4,6 +4,7 @@ rm(list=ls())
 # define parser arguments ----
 # args <- list()
 # args$fake <- TRUE
+library(argparse)
 parser <- ArgumentParser()
 parser$add_argument("--fake", action = "store_true", help = "use fake data")               
 args = parser$parse_args()
@@ -36,7 +37,7 @@ if(args$fake){
   dataOriginal = read.csv("data/aux/fake_data.csv")
 } else {
   library(arrow)
-  dataOriginal = arrow::read_parquet("data/data.parquet")
+  dataOriginal = arrow::read_parquet("data/processed/data.parquet")
 }
 
 ## Convert all variables to numeric (some are integers)

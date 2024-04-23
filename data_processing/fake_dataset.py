@@ -32,7 +32,7 @@ def main(args):
     other_cols = []
 
     # Initialize zip and year columns
-    sample_zips = np.random.choice(df['zip'].unique(), args.sample_zips, replace=True)
+    sample_zips = np.random.choice(df['zip'].unique(), args.sample_zips, replace=False)
     rows = [{'zip': zip, 'year': year} for zip in sample_zips for year in range(2000, 2017)]
     df_fake = pd.DataFrame(rows)
 

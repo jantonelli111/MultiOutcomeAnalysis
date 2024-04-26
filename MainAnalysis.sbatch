@@ -1,9 +1,9 @@
 #!/bin/bash
 #
-#SBATCH -p serial_requeue # partition (queue)
-#SBATCH -c 12 # number of cores
-#SBATCH --mem 96GB 
-#SBATCH -t 1-00:00 # time (D-HH:MM)
+#SBATCH -p fasse # partition (queue)
+#SBATCH -c 48 # number of cores
+#SBATCH --mem 184GB 
+#SBATCH -t 7-00:00 # time (D-HH:MM)
 
 singularity exec --cleanenv --env R_LIBS_USER=../RELEASE_3_14 ../ifxrstudio:RELEASE_3_14.sif Rscript MainAnalysis.R
 

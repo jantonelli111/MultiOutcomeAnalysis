@@ -6,7 +6,8 @@ rm(list=ls())
 # args$fake <- TRUE
 library(argparse)
 parser <- ArgumentParser()
-parser$add_argument("--fake", action = "store_true", help = "use fake data")               
+parser$add_argument("--fake", action = "store_true", help = "use fake data")  
+parser$add_argument("--analysis", default = "test1", help = "analysis to run")             
 args = parser$parse_args()
 
 ###########################################################
@@ -672,68 +673,79 @@ A3 = list(Y = Y, Tr = Tr, X = X,
 ##==========================================================================##
 source("MainFunctions.R")
 
-## ANALYSES 0: Original setting
-cat("ANALYSIS0","\n")
-A0 = SettingList[["ANALYSIS0"]]
-test0 = multiFunc(Y=A0$Y, 
-                  Tr=A0$Tr, 
-                  X=A0$X, 
-                  b=A0$b, 
-                  t1=A0$t1, 
-                  t2=A0$t2, 
-                  t1NC=A0$t1NC, 
-                  t2NC=A0$t2NC,
-                  maxM = A0$m,
-                  scaleData = TRUE,
-                  nB = 50)
+if(args$analysis == "test0"){
+  ## ANALYSES 0: Original setting
+  cat("ANALYSIS0","\n")
+  A0 = SettingList[["ANALYSIS0"]]
+  test = multiFunc(Y=A0$Y, 
+                    Tr=A0$Tr, 
+                    X=A0$X, 
+                    b=A0$b, 
+                    t1=A0$t1, 
+                    t2=A0$t2, 
+                    t1NC=A0$t1NC, 
+                    t2NC=A0$t2NC,
+                    maxM = A0$m,
+                    scaleData = TRUE,
+                    nB = 50)
 
-## ANALYSIS 1: ANALYSIS 0 but No NCEs, only keeping NCOs
-cat("ANALYSIS1","\n")
-A1 = SettingList[["ANALYSIS1"]]
-test1 = multiFunc(Y=A1$Y, 
-                  Tr=A1$Tr, 
-                  X=A1$X, 
-                  b=A1$b, 
-                  t1=A1$t1, 
-                  t2=A1$t2, 
-                  t1NC=A1$t1NC, 
-                  t2NC=A1$t2NC,
-                  maxM = A1$m,
-                  scaleData = TRUE,
-                  nB = 50)
+} else if(args$analysis == "test1"){
+  ## ANALYSIS 1: ANALYSIS 0 but No NCEs, only keeping NCOs
+  cat("ANALYSIS1","\n")
+  A1 = SettingList[["ANALYSIS1"]]
+  test = multiFunc(Y=A1$Y, 
+                    Tr=A1$Tr, 
+                    X=A1$X, 
+                    b=A1$b, 
+                    t1=A1$t1, 
+                    t2=A1$t2, 
+                    t1NC=A1$t1NC, 
+                    t2NC=A1$t2NC,
+                    maxM = A1$m,
+                    scaleData = TRUE,
+                    nB = 50)
 
-## ANALYSIS 2: ANALYSIS 0 but 3 years ahead and back in time
-cat("ANALYSIS2","\n")
-A2 = SettingList[["ANALYSIS2"]]
-test2 = multiFunc(Y=A2$Y, 
-                  Tr=A2$Tr, 
-                  X=A2$X, 
-                  b=A2$b, 
-                  t1=A2$t1, 
-                  t2=A2$t2, 
-                  t1NC=A2$t1NC, 
-                  t2NC=A2$t2NC,
-                  maxM = A2$m,
-                  scaleData = TRUE,
-                  nB = 50)
+} else if(args$analysis == "test2"){
+  ## ANALYSIS 2: ANALYSIS 0 but 3 years ahead and back in time
+  cat("ANALYSIS2","\n")
+  A2 = SettingList[["ANALYSIS2"]]
+  test = multiFunc(Y=A2$Y, 
+                    Tr=A2$Tr, 
+                    X=A2$X, 
+                    b=A2$b, 
+                    t1=A2$t1, 
+                    t2=A2$t2, 
+                    t1NC=A2$t1NC, 
+                    t2NC=A2$t2NC,
+                    maxM = A2$m,
+                    scaleData = TRUE,
+                    nB = 50)
 
-## ANALYSIS 3: Spatial NCs
-cat("ANALYSIS3","\n")
-A3 = SettingList[["ANALYSIS3"]]
-test3 = multiFunc(Y=A3$Y, 
-                  Tr=A3$Tr, 
-                  X=A3$X, 
-                  b=A3$b, 
-                  t1=A3$t1, 
-                  t2=A3$t2, 
-                  t1NC=A3$t1NC, 
-                  t2NC=A3$t2NC,
-                  maxM = A3$m,
-                  scaleData = TRUE,
-                  nB = 50)
+
+} else if(args$analysis == "test3") {
+
+  ## ANALYSIS 3: Spatial NCs
+  cat("ANALYSIS3","\n")
+  A3 = SettingList[["ANALYSIS3"]]
+  test = multiFunc(Y=A3$Y, 
+                    Tr=A3$Tr, 
+                    X=A3$X, 
+                    b=A3$b, 
+                    t1=A3$t1, 
+                    t2=A3$t2, 
+                    t1NC=A3$t1NC, 
+                    t2NC=A3$t2NC,
+                    maxM = A3$m,
+                    scaleData = TRUE,
+                    nB = 50)
+
+}
 
 if(args$fake){
-  save(test1, test2, test3, test4, file="data/output/fake_OutputSaved.dat")
+  output_file = paste0("data/output/fake_output_", args$analysis, ".dat")
 } else {
-  save(test1, test2, test3, test4, file="data/output/OutputSaved.dat")
+  output_file = paste0("data/output/output_", args$analysis, ".dat")
 }
+
+save(test, file=output_file)
+print(paste0("Output saved to: ", output_file))

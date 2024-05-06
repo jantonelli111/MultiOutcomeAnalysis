@@ -1,6 +1,11 @@
 # Our main function
 multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, scaleData = FALSE, nB = 100){
   
+  # Convert to data.table if not already
+  Y = as.data.table(Y)
+  Tr = as.data.table(Tr)
+  X = as.data.table(X)
+  
   # Check no. of observations, outcomes, exposures, and observed confounders
   N = nrow(Y)
   Q = ncol(Y)
@@ -10,40 +15,36 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, scaleData = FALSE, 
   J = ncol(b)
   
   # Scale data
-  if(scaleData){
-    Tr = scale(Tr, center = FALSE, scale = TRUE)
-    Y = scale(Y, center = FALSE, scale = TRUE)
+  if (scaleData) {
+    Tr[] = lapply(Tr, scale, center = FALSE, scale = TRUE)
+    Y[] = lapply(Y, scale, center = FALSE, scale = TRUE)
   }
   
-  # Estimate no. of unobserved confounders for Tr and Y models
-  Mest = matrix(NA, 2, 8)
-  rownames(Mest) = c("Tr", "Y")
-  colnames(Mest) = c("vss.comp1", "vss.comp2", "MAP", "BIC", "adjBIC",
-                     "parallel.fa", "parallel.pc", "eigen")
+  # Setup for matrix of estimation results
+  Mest = matrix(NA, 2, 8,
+                 dimnames = list(c("Tr", "Y"),
+                                 c("vss.comp1", "vss.comp2",
+                                   "MAP", "BIC", "adjBIC",
+                                   "parallel.fa", "parallel.pc",
+                                   "eigen")))
   
+  # Modeling and residual calculation
   naivef = earth::earth(x = X, y = Tr)
-  TrResidual = Tr - predict(naivef)
+  TrResidual = Tr - predict(naivef) #Tr -  X[, predict(naivef, newdata = .SD), .SDcols = names(Tr)]
   
   for(gMod in 1:2){
     
-    if(gMod == 1){ # gLinear
-      naiveg = lm(Y ~ Tr + X)
-      YResidual = Y - predict(naiveg)
-    } else if(gMod == 2){ # gNonLinear
+    if(gMod == 1){  # gLinear
+      naiveg = lm(as.matrix(Y) ~ as.matrix(Tr) + as.matrix(X))
+      YResidual = Y - data.table(predict(naiveg, newdata = cbind(Tr, X)))
+    } else if(gMod == 2){  # gNonLinear
       naiveg = earth::earth(x = cbind(Tr, X), y = Y)
-      YResidual = Y - predict(naiveg)
+      YResidual = Y - data.table(predict(naiveg, newdata = cbind(Tr, X)))
     }
     
     ## Store residual densities
-    densYlist = list()
-    for (qq in 1 : Q) {
-      densYlist[[qq]] = density(YResidual[,qq])
-    }
-    
-    densTrlist = list()
-    for (pp in 1 : P) {
-      densTrlist[[pp]] = density(TrResidual[,pp])
-    }
+    densYlist = lapply(1:Q, function(qq) density(YResidual[[qq]]))
+    densTrlist = lapply(1:P, function(pp) density(TrResidual[[pp]]))
     
     invisible(capture.output(vssTr <- psych::vss(TrResidual, plot = FALSE)))
     invisible(capture.output(parallelTr <- psych::fa.parallel(TrResidual,
@@ -67,9 +68,7 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, scaleData = FALSE, 
     
     # Save p-values from the test if the given M is sufficient
     # to capture the full dimensionality of data.
-    Mpval = matrix(NA, 2, maxM)
-    rownames(Mpval) = c("Tr", "Y")
-    colnames(Mpval) = as.factor(1:maxM)
+    Mpval = matrix(NA, 2, maxM, dimnames = list(c("Tr", "Y"), as.character(1:maxM)))
     for(mm in 1:maxM){
       Mpval[1, mm] = as.numeric(factanal(TrResidual, factors = mm, 
                                          nstart=100, lower = 0.01)$PVAL)
@@ -78,14 +77,15 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, scaleData = FALSE, 
     }
     
     # For screeplots
-    TrScree = data.frame(M = rep(1:P, 2),
+    TrScree = data.table(M = rep(1:P, each = 2),
                          Type = rep(c("PC", "FA"), each = P),
                          VarExp = c(parallelTr$pc.values, parallelTr$fa.values))
-    TrScree$Type = factor(TrScree$Type, levels = c("PC", "FA"))
-    YScree = data.frame(M = rep(1:Q, 2),
+    TrScree[, Type := factor(Type, levels = c("PC", "FA"))]
+    
+    YScree = data.table(M = rep(1:Q, each = 2),
                         Type = rep(c("PC", "FA"), each = Q),
                         VarExp = c(parallelY$pc.values, parallelY$fa.values))
-    YScree$Type = factor(YScree$Type, levels = c("PC", "FA"))
+    YScree[, Type := factor(Type, levels = c("PC", "FA"))]
     
     # Determine M - We try multiple values of m and save the results.
     saveResult = array(list(), maxM)
@@ -146,49 +146,43 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, scaleData = FALSE, 
       MncInvList = list()
       for(jj in 1:J){
         # For jj-th NC outcome
-        t1NC_jj = t1NC[[jj]]
-        t2NC_jj = t2NC[[jj]]
-        
         Ghat_j = Mnc_j = NULL
-        for(cj in 1:nrow(t1NC_jj)){
-          t1NC_cj = t1NC_jj[cj, ]
-          t2NC_cj = t2NC_jj[cj, ]
+        for(cj in seq_len(nrow(t1NC[[jj]]))){
           #tmp1 = colMeans(predict(naiveg, cbind(t(replicate(N, t1NC_cj)), X)))
           #tmp2 = colMeans(predict(naiveg, cbind(t(replicate(N, t2NC_cj)), X)))
-          tmp1 = colMeans(predict(naiveg, as.data.frame(cbind(matrix(t1NC_cj, nrow = N, ncol = P, byrow = TRUE), X))))
-          tmp2 = colMeans(predict(naiveg, as.data.frame(cbind(matrix(t2NC_cj, nrow = N, ncol = P, byrow = TRUE), X))))
-          Ghat_j_onecol = as.numeric(tmp1 - tmp2)
-          Ghat_j = cbind(Ghat_j, Ghat_j_onecol)
-          Mnc_j_onecol = Sigma_u.tx.hat_chol %*% coef_mu_u.tx.hat %*%
-            (t1NC_cj - t2NC_cj)
-          Mnc_j = cbind(Mnc_j, Mnc_j_onecol)
-          MncInv_j = MASS::ginv(Mnc_j)
-          #D_j = t(b[, jj, drop = FALSE]) %*% Ghat_j %*% MncInv_j
+          t1NC_cj_data = data.table(matrix(t1NC[[jj]][cj, ],
+                                           nrow = N, ncol = P, byrow = TRUE), X)
+          t2NC_cj_data = data.table(matrix(t2NC[[jj]][cj, ],
+                                           nrow = N, ncol = P, byrow = TRUE), X)
+          tmp1 = colMeans(predict(naiveg, newdata = t1NC_cj_data))
+          tmp2 = colMeans(predict(naiveg, newdata = t2NC_cj_data))
+          Ghat_j = cbind(Ghat_j, tmp1 - tmp2)
+          Mnc_j = cbind(Mnc_j, Sigma_u.tx.hat_chol %*%
+                          coef_mu_u.tx.hat %*%
+                          (t1NC[[jj]][cj, ] - t2NC[[jj]][cj, ]))
         }
         #D = rbind(D, D_j)
-        D[jj, ] = t(b[, jj, drop = FALSE]) %*% Ghat_j %*% MncInv_j
+        D[jj, ] = t(b[, jj, drop = FALSE]) %*% Ghat_j %*% MASS::ginv(Mnc_j)
         GhatList[[jj]] = Ghat_j
         MncList[[jj]] = Mnc_j
-        MncInvList[[jj]] = MncInv_j
+        MncInvList[[jj]] = MASS::ginv(Mnc_j)
       }
       
-      out = list(B.hat = B.hat, Gamma.hat = Gamma.hat,
-                 mu_u.deltatx.hat = mu_u.deltatx.hat,
-                 Sigma_u.tx.hat = Sigma_u.tx.hat,
-                 Sigma_u.tx.hat_chol = Sigma_u.tx.hat_chol,
-                 Sigma_t.x.hat = Sigma_t.x.hat,
-                 Sigma_y.tx.hat = Sigma_y.tx.hat,
-                 FATrRes = FATrRes, FAYRes = FAYRes,
-                 G = G,
-                 D = D, GhatList = GhatList,
-                 MncList = MncList, MncInvList = MncInvList)
-      
-      saveResult[[mm]] = out
+      saveResult[[mm]] = list(B.hat = B.hat, Gamma.hat = Gamma.hat,
+                              mu_u.deltatx.hat = mu_u.deltatx.hat,
+                              Sigma_u.tx.hat = Sigma_u.tx.hat,
+                              Sigma_u.tx.hat_chol = Sigma_u.tx.hat_chol,
+                              Sigma_t.x.hat = Sigma_t.x.hat,
+                              Sigma_y.tx.hat = Sigma_y.tx.hat,
+                              FATrRes = FATrRes, FAYRes = FAYRes,
+                              G = G,
+                              D = D, GhatList = GhatList,
+                              MncList = MncList, MncInvList = MncInvList)
       
       ## Measuring uncertainty of PATE under NUC
       Gboot[[mm]] = array(NA, dim = c(nB, Q, length(t1)))
       
-      for(bt in 1:nB){
+      system.time(for(bt in 1:nB){
         
         # Generate bootstrapped data
         set.seed(bt)
@@ -198,7 +192,7 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, scaleData = FALSE, 
         Xbt = X[indB, ]
         
         if(gMod == 1){ # gLinear
-          naiveg = lm(Ybt ~ Trbt + Xbt)
+          naiveg = lm(as.matrix(Ybt) ~ as.matrix(Trbt) + as.matrix(Xbt))
           #YResidual = Y - predict(naiveg)
         } else if(gMod == 2){ # gNonLinear
           naiveg = earth::earth(x = cbind(Trbt, Xbt), y = Ybt)
@@ -206,14 +200,14 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, scaleData = FALSE, 
         }
         
         for(jj in 1:length(t1)){
-          t1_jj = t1[[jj]]
-          t2_jj = t2[[jj]]
-          G1 = predict(naiveg, as.data.frame(cbind(matrix(t1_jj, nrow = N, ncol = P, byrow = TRUE), Xbt)))
-          G2 = predict(naiveg, as.data.frame(cbind(matrix(t2_jj, nrow = N, ncol = P, byrow = TRUE), Xbt)))
+          t1_jj_data = data.table(matrix(t1[[jj]], nrow = N, ncol = P, byrow = TRUE), Xbt)
+          t2_jj_data = data.table(matrix(t2[[jj]], nrow = N, ncol = P, byrow = TRUE), Xbt)
+          G1 = predict(naiveg, newdata = t1_jj_data)
+          G2 = predict(naiveg, newdata = t2_jj_data)
           Gboot[[mm]][bt, , jj] = as.numeric(colMeans(G1 - G2))
         }
-      }
-      
+      })
+
       if(gMod == 1){
         gLinear = list(Estimates = saveResult,
                        Mdetermination = list(Mest = Mest, Mpval = Mpval,
@@ -227,15 +221,15 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, scaleData = FALSE, 
                        Gboot = Gboot)
       } else if(gMod == 2){
         gNonLinear = list(Estimates = saveResult,
-                          Mdetermination = list(Mest = Mest, Mpval = Mpval,
-                                                TrScree = TrScree, YScree = YScree),
-                          Densities = list(densTrlist = densTrlist,
-                                           densYlist = densYlist),
-                          Corr = list(CorrTr = cor(Tr), CorrTrResidual = cor(TrResidual),
-                                      CorrY = cor(Y), CorrYResidual = cor(YResidual)),
-                          Gboot = Gboot)
+                       Mdetermination = list(Mest = Mest, Mpval = Mpval,
+                                             TrScree = TrScree, YScree = YScree),
+                       Densities = list(densTrlist = densTrlist,
+                                        densYlist = densYlist),
+                       Corr = list(CorrTr = cor(Tr), CorrTrResidual = cor(TrResidual),
+                                   CorrY = cor(Y), CorrYResidual = cor(YResidual)),
+                       Gboot = Gboot)
       }
-      
+
     }
     
   }
@@ -245,85 +239,7 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, scaleData = FALSE, 
                                     b = b, t1NC = t1NC, t2NC = t2NC),
                     gLinear = gLinear,
                     gNonLinear = gNonLinear)
-  
+
   return(allResults)
   
-}
-
-# Wrapping function to run all four analyses
-wrapFunc <- function(SettingList, scaleData = TRUE, nB = 100){
-  
-  ##--------------------------------------------------------------------------##
-  ## ANALYSIS 0: Original setting
-  ##--------------------------------------------------------------------------##
-  cat("ANALYSIS0","\n")
-  A0 = SettingList[["ANALYSIS0"]]
-  test0 = multiFunc(Y=A0$Y, 
-                    Tr=A0$Tr, 
-                    X=A0$X, 
-                    b=A0$b, 
-                    t1=A0$t1, 
-                    t2=A0$t2, 
-                    t1NC=A0$t1NC, 
-                    t2NC=A0$t2NC,
-                    maxM = A0$m,
-                    scaleData = scaleData,
-                    nB = nB)
-  
-  ##----------------------------------------------------------------------------##
-  ## ANALYSIS 1: ANALYSIS 0 but No NCEs, only keeping NCOs
-  ##----------------------------------------------------------------------------##
-  cat("ANALYSIS1","\n")
-  A1 = SettingList[["ANALYSIS1"]]
-  test1 = multiFunc(Y=A1$Y, 
-                    Tr=A1$Tr, 
-                    X=A1$X, 
-                    b=A1$b, 
-                    t1=A1$t1, 
-                    t2=A1$t2, 
-                    t1NC=A1$t1NC, 
-                    t2NC=A1$t2NC,
-                    maxM = A1$m,
-                    scaleData = scaleData,
-                    nB = nB)
-  
-  ##----------------------------------------------------------------------------##
-  ## ANALYSIS 2: ANALYSIS 0 but 3 years ahead and back in time
-  ##----------------------------------------------------------------------------##
-  cat("ANALYSIS2","\n")
-  A2 = SettingList[["ANALYSIS2"]]
-  test2 = multiFunc(Y=A2$Y, 
-                    Tr=A2$Tr, 
-                    X=A2$X, 
-                    b=A2$b, 
-                    t1=A2$t1, 
-                    t2=A2$t2, 
-                    t1NC=A2$t1NC, 
-                    t2NC=A2$t2NC,
-                    maxM = A2$m,
-                    scaleData = scaleData,
-                    nB = nB)
-  
-  ##----------------------------------------------------------------------------##
-  ## ANALYSIS 3: Spatial NCs
-  ##----------------------------------------------------------------------------##
-  cat("ANALYSIS3","\n")
-  A3 = SettingList[["ANALYSIS3"]]
-  test3 = multiFunc(Y=A3$Y, 
-                    Tr=A3$Tr, 
-                    X=A3$X, 
-                    b=A3$b, 
-                    t1=A3$t1, 
-                    t2=A3$t2, 
-                    t1NC=A3$t1NC, 
-                    t2NC=A3$t2NC,
-                    maxM = A3$m,
-                    scaleData = scaleData,
-                    nB = nB)
-  
-  OUT = list(test0 = test0,
-             test1 = test1,
-             test2 = test2,
-             test3 = test3)
-  return(OUT)
 }

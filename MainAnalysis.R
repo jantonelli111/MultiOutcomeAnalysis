@@ -31,65 +31,49 @@ args = parser$parse_args()
 require(earth) # for nonlinear multivariate regression model (MARS; Friedman, 1991)
 require(MASS)  # for generalized inverse of matrix: ginv()
 require(psych) # for the estimation of unobserved confounders: vss(), fa.parallel()
+require(data.table) # for data.table functions to improve efficiency
 
 ## Read data -----
 if(args$fake){
-  dataOriginal = read.csv("data/aux/fake_data.csv")
+  dataOriginal = fread("data/aux/fake_data.csv")
 } else {
   library(arrow)
   dataOriginal = arrow::read_parquet("data/processed/data.parquet")
 }
+data = dataOriginal
 
-## Convert all variables to numeric (some are integers)
-data = data.frame(sapply(dataOriginal, as.numeric))
+## Convert data to a data.table
+setDT(data)
+## Convert all columns to numeric (handles integers fine)
+data[, (names(data)) := lapply(.SD, as.numeric)]
 
 ## Need to create future exposures and prior outcomes variables for 
 ## Use as negative controls
-data$FuturePM25 = rep(NA, nrow(data))
-data$FutureOzone = rep(NA, nrow(data))
-data$FutureNH4 = rep(NA, nrow(data))
-data$FutureSO4 = rep(NA, nrow(data))
-data$FutureOC = rep(NA, nrow(data))
-data$FutureEC = rep(NA, nrow(data))
-data$FutureNO3 = rep(NA, nrow(data))
+newCols <- c("FuturePM25", "FutureOzone",
+             "PriorMortality", "PriorCOPD")
+data[, (newCols) := .(rep(NA_real_, .N), rep(NA_real_, .N),
+                      rep(NA_real_, .N), rep(NA_real_, .N))]
 
-data$PriorMortality = rep(NA, nrow(data))
-data$PriorCOPD = rep(NA, nrow(data))
+## Create shifts in year columns for past and future matching
+data[, c("YearPlus1", "YearMinus1") := .(year + 1, year - 1)]
 
-uniqueZips = unique(data$zip)
-uniqueYears = unique(data$year)
+## Create a key for faster subsetting and joins
+setkey(data, zip, year)
 
-for (tempZip in uniqueZips) {
-  for (tempYear in uniqueYears) {
-    
-    ## Finding indices of data frame that correspond to this 
-    ## particular zip code and this particular year as well as
-    ## previous and future year
-    wCurrent = which(data$zip == tempZip &
-                       data$year == tempYear)
-    wPast = which(data$zip == tempZip &
-                    data$year == tempYear-1)
-    wFuture = which(data$zip == tempZip &
-                      data$year == tempYear+1)
-    
-    ## only proceed if each of these is in the data set
-    if (length(wCurrent) == 1 &
-        length(wPast) == 1 &
-        length(wFuture) == 1) {
-      
-      data$PriorMortality[wCurrent] = data$death_rate[wPast]
-      data$PriorCOPD[wCurrent] = data$copd_rate[wPast]
-      
-      data$FutureEC[wCurrent] = data$ec[wFuture]
-      data$FutureOzone[wCurrent] = data$ozone[wFuture]
-      data$FutureOC[wCurrent] = data$oc[wFuture]
-      data$FutureNH4[wCurrent] = data$nh4[wFuture]
-      data$FutureSO4[wCurrent] = data$so4[wFuture]
-      data$FutureNO3[wCurrent] = data$no3[wFuture]
-      data$FuturePM25[wCurrent] = data$pm25[wFuture]
-    }
-  }
-}
+## Join data with itself to fetch future and past values
+dataFuture <- data[, .(zip, year = YearPlus1,
+                       FuturePM25 = pm25, FutureOzone = ozone)]
+dataPast <- data[, .(zip, year = YearMinus1,
+                     PriorMortality = death_rate, PriorCOPD = copd_rate)]
+
+## Merge future and past data into the original dataset by reference
+data[dataFuture, on = .(zip, year),
+     `:=` (FuturePM25 = i.FuturePM25, FutureOzone = i.FutureOzone)]
+data[dataPast, on = .(zip, year),
+     `:=` (PriorMortality = i.PriorMortality, PriorCOPD = i.PriorCOPD)]
+
+## Clean up helper columns
+data[, `:=` (YearPlus1 = NULL, YearMinus1 = NULL)]
 
 ## Remove rows that have NAs for variables of interest
 variablesOfInterest = c("zip",
@@ -127,21 +111,13 @@ variablesOfInterest = c("zip",
                         "hypert_rate",
                         "FuturePM25",
                         "FutureOzone",
-                        "FutureNH4",
-                        "FutureSO4",
-                        "FutureOC",
-                        "FutureEC",
-                        "FutureNO3",
                         "PriorMortality",
                         "PriorCOPD")
 
 
-## Remove NAs
-wNotNA = which(complete.cases(data[,variablesOfInterest]) == TRUE)
-
 ## Store data frame without NAs
-finalData = data[wNotNA,]
-finalData = t(data.frame(do.call(rbind, finalData))) # convert list to dataframe
+finalData = na.omit(data, cols = variablesOfInterest)
+setDT(finalData)
 
 
 
@@ -196,9 +172,9 @@ t2[[1]] = c(apply(Tr[,1:7], 2, quantile, 0.25), apply(Tr[,8:9], 2, median))
 
 for (tt in 2 : 8) {
   t1[[tt]] = apply(Tr, 2, median)
-  t1[[tt]][tt-1] = quantile(Tr[,tt-1], 0.75)
+  t1[[tt]][tt-1] = quantile(Tr[,c(tt-1)], 0.75)
   t2[[tt]] = apply(Tr, 2, median)
-  t2[[tt]][tt-1] = quantile(Tr[,tt-1], 0.25)
+  t2[[tt]][tt-1] = quantile(Tr[,c(tt-1)], 0.25)
 }
 
 ## Negative control outcomes
@@ -216,8 +192,8 @@ t1NC[[1]] = t(matrix(rep(apply(Tr, 2, median), 2), ncol=2))
 t2NC[[1]] = t(matrix(rep(apply(Tr, 2, median), 2), ncol=2))
 
 for (tt in 8 : 9) {
-  t1NC[[1]][tt-7,tt] = quantile(Tr[,tt], 0.75)
-  t2NC[[1]][tt-7,tt] = quantile(Tr[,tt], 0.25)
+  t1NC[[1]][tt-7,tt] = quantile(Tr[,c(tt)], 0.75)
+  t2NC[[1]][tt-7,tt] = quantile(Tr[,c(tt)], 0.25)
 }
 
 ## Now use current exposures with prior outcomes
@@ -225,16 +201,16 @@ t1NC[[2]] = t(matrix(rep(apply(Tr, 2, median), 7), ncol=7))
 t2NC[[2]] = t(matrix(rep(apply(Tr, 2, median), 7), ncol=7))
 
 for (tt in 1 : 7) {
-  t1NC[[2]][tt,tt] = quantile(Tr[,tt], 0.75)
-  t2NC[[2]][tt,tt] = quantile(Tr[,tt], 0.25)
+  t1NC[[2]][tt,tt] = quantile(Tr[,c(tt)], 0.75)
+  t2NC[[2]][tt,tt] = quantile(Tr[,c(tt)], 0.25)
 }
 
 t1NC[[3]] = t(matrix(rep(apply(Tr, 2, median), 7), ncol=7))
 t2NC[[3]] = t(matrix(rep(apply(Tr, 2, median), 7), ncol=7))
 
 for (tt in 1 : 7) {
-  t1NC[[3]][tt,tt] = quantile(Tr[,tt], 0.75)
-  t2NC[[3]][tt,tt] = quantile(Tr[,tt], 0.25)
+  t1NC[[3]][tt,tt] = quantile(Tr[,c(tt)], 0.75)
+  t2NC[[3]][tt,tt] = quantile(Tr[,c(tt)], 0.25)
 }
 
 maxMfunc = function(qp, m){
@@ -302,9 +278,9 @@ t2[[1]] = apply(Tr[,1:7], 2, quantile, 0.25)
 
 for (tt in 2 : 8) {
   t1[[tt]] = apply(Tr, 2, median)
-  t1[[tt]][tt-1] = quantile(Tr[,tt-1], 0.75)
+  t1[[tt]][tt-1] = quantile(Tr[,c(tt-1)], 0.75)
   t2[[tt]] = apply(Tr, 2, median)
-  t2[[tt]][tt-1] = quantile(Tr[,tt-1], 0.25)
+  t2[[tt]][tt-1] = quantile(Tr[,c(tt-1)], 0.25)
 }
 
 ## Negative control outcomes
@@ -321,16 +297,16 @@ t1NC[[1]] = t(matrix(rep(apply(Tr, 2, median), 7), ncol=7))
 t2NC[[1]] = t(matrix(rep(apply(Tr, 2, median), 7), ncol=7))
 
 for (tt in 1 : 7) {
-  t1NC[[1]][tt,tt] = quantile(Tr[,tt], 0.75)
-  t2NC[[1]][tt,tt] = quantile(Tr[,tt], 0.25)
+  t1NC[[1]][tt,tt] = quantile(Tr[,c(tt)], 0.75)
+  t2NC[[1]][tt,tt] = quantile(Tr[,c(tt)], 0.25)
 }
 
 t1NC[[2]] = t(matrix(rep(apply(Tr, 2, median), 7), ncol=7))
 t2NC[[2]] = t(matrix(rep(apply(Tr, 2, median), 7), ncol=7))
 
 for (tt in 1 : 7) {
-  t1NC[[2]][tt,tt] = quantile(Tr[,tt], 0.75)
-  t2NC[[2]][tt,tt] = quantile(Tr[,tt], 0.25)
+  t1NC[[2]][tt,tt] = quantile(Tr[,c(tt)], 0.75)
+  t2NC[[2]][tt,tt] = quantile(Tr[,c(tt)], 0.25)
 }
 
 maxMfunc = function(qp, m){
@@ -351,62 +327,44 @@ A1 = list(Y = Y, Tr = Tr, X = X,
 ##----------------------------------------------------------------------------##
 ## ANALYSIS 2: ANALYSIS 0 but 3 years ahead and back in time
 ##----------------------------------------------------------------------------##
-data = data.frame(sapply(dataOriginal, as.numeric))
+data = dataOriginal
+
+## Convert data to a data.table
+setDT(data)
+## Convert all columns to numeric (handles integers fine)
+data[, (names(data)) := lapply(.SD, as.numeric)]
 
 ## Need to create future exposures and prior outcomes variables for 
 ## Use as negative controls
-data$FuturePM25 = rep(NA, nrow(data))
-data$FutureOzone = rep(NA, nrow(data))
-data$FutureNH4 = rep(NA, nrow(data))
-data$FutureSO4 = rep(NA, nrow(data))
-data$FutureOC = rep(NA, nrow(data))
-data$FutureEC = rep(NA, nrow(data))
-data$FutureNO3 = rep(NA, nrow(data))
+newCols <- c("FuturePM25", "FutureOzone",
+             "PriorMortality", "PriorCOPD")
+data[, (newCols) := .(rep(NA_real_, .N), rep(NA_real_, .N),
+                      rep(NA_real_, .N), rep(NA_real_, .N))]
 
-data$PriorMortality = rep(NA, nrow(data))
-data$PriorCOPD = rep(NA, nrow(data))
+## Create shifts in year columns for past and future matching
+data[, c("YearPlus", "YearMinus") := .(year + 3, year - 3)]
 
-uniqueZips = unique(data$zip)
-uniqueYears = unique(data$year)
+## Create a key for faster subsetting and joins
+setkey(data, zip, year)
 
-for (tempZip in uniqueZips) {
-  for (tempYear in uniqueYears) {
-    
-    ## Finding indices of data frame that correspond to this 
-    ## particular zip code and this particular year as well as
-    ## previous and future year
-    wCurrent = which(data$zip == tempZip &
-                       data$year == tempYear)
-    wPast = which(data$zip == tempZip &
-                    data$year == tempYear-3)
-    wFuture = which(data$zip == tempZip &
-                      data$year == tempYear+3)
-    
-    ## only proceed if each of these is in the data set
-    if (length(wCurrent) == 1 &
-        length(wPast) == 1 &
-        length(wFuture) == 1) {
-      
-      data$PriorMortality[wCurrent] = data$death_rate[wPast]
-      data$PriorCOPD[wCurrent] = data$copd_rate[wPast]
-      
-      data$FutureEC[wCurrent] = data$ec[wFuture]
-      data$FutureOzone[wCurrent] = data$ozone[wFuture]
-      data$FutureOC[wCurrent] = data$oc[wFuture]
-      data$FutureNH4[wCurrent] = data$nh4[wFuture]
-      data$FutureSO4[wCurrent] = data$so4[wFuture]
-      data$FutureNO3[wCurrent] = data$no3[wFuture]
-      data$FuturePM25[wCurrent] = data$pm25[wFuture]
-    }
-  }
-}
+## Join data with itself to fetch future and past values
+dataFuture <- data[, .(zip, year = YearPlus,
+                       FuturePM25 = pm25, FutureOzone = ozone)]
+dataPast <- data[, .(zip, year = YearMinus,
+                     PriorMortality = death_rate, PriorCOPD = copd_rate)]
 
-## Remove NAs
-wNotNA = which(complete.cases(data[,variablesOfInterest]) == TRUE)
+## Merge future and past data into the original dataset by reference
+data[dataFuture, on = .(zip, year),
+     `:=` (FuturePM25 = i.FuturePM25, FutureOzone = i.FutureOzone)]
+data[dataPast, on = .(zip, year),
+     `:=` (PriorMortality = i.PriorMortality, PriorCOPD = i.PriorCOPD)]
+
+## Clean up helper columns
+data[, `:=` (YearPlus = NULL, YearMinus = NULL)]
 
 ## Store data frame without NAs
-finalData = data[wNotNA,]
-finalData = t(data.frame(do.call(rbind, finalData))) # convert list to dataframe
+finalData = na.omit(data, cols = variablesOfInterest)
+setDT(finalData)
 
 ## Now create variables needed for our analysis
 Y = finalData[,c("death_rate",
@@ -456,9 +414,9 @@ t2[[1]] = c(apply(Tr[,1:7], 2, quantile, 0.25), apply(Tr[,8:9], 2, median))
 
 for (tt in 2 : 8) {
   t1[[tt]] = apply(Tr, 2, median)
-  t1[[tt]][tt-1] = quantile(Tr[,tt-1], 0.75)
+  t1[[tt]][tt-1] = quantile(Tr[,c(tt-1)], 0.75)
   t2[[tt]] = apply(Tr, 2, median)
-  t2[[tt]][tt-1] = quantile(Tr[,tt-1], 0.25)
+  t2[[tt]][tt-1] = quantile(Tr[,c(tt-1)], 0.25)
 }
 
 ## Negative control outcomes
@@ -476,8 +434,8 @@ t1NC[[1]] = t(matrix(rep(apply(Tr, 2, median), 2), ncol=2))
 t2NC[[1]] = t(matrix(rep(apply(Tr, 2, median), 2), ncol=2))
 
 for (tt in 8 : 9) {
-  t1NC[[1]][tt-7,tt] = quantile(Tr[,tt], 0.75)
-  t2NC[[1]][tt-7,tt] = quantile(Tr[,tt], 0.25)
+  t1NC[[1]][tt-7,tt] = quantile(Tr[,c(tt)], 0.75)
+  t2NC[[1]][tt-7,tt] = quantile(Tr[,c(tt)], 0.25)
 }
 
 ## Now use current exposures with prior outcomes
@@ -485,16 +443,16 @@ t1NC[[2]] = t(matrix(rep(apply(Tr, 2, median), 7), ncol=7))
 t2NC[[2]] = t(matrix(rep(apply(Tr, 2, median), 7), ncol=7))
 
 for (tt in 1 : 7) {
-  t1NC[[2]][tt,tt] = quantile(Tr[,tt], 0.75)
-  t2NC[[2]][tt,tt] = quantile(Tr[,tt], 0.25)
+  t1NC[[2]][tt,tt] = quantile(Tr[,c(tt)], 0.75)
+  t2NC[[2]][tt,tt] = quantile(Tr[,c(tt)], 0.25)
 }
 
 t1NC[[3]] = t(matrix(rep(apply(Tr, 2, median), 7), ncol=7))
 t2NC[[3]] = t(matrix(rep(apply(Tr, 2, median), 7), ncol=7))
 
 for (tt in 1 : 7) {
-  t1NC[[3]][tt,tt] = quantile(Tr[,tt], 0.75)
-  t2NC[[3]][tt,tt] = quantile(Tr[,tt], 0.25)
+  t1NC[[3]][tt,tt] = quantile(Tr[,c(tt)], 0.75)
+  t2NC[[3]][tt,tt] = quantile(Tr[,c(tt)], 0.25)
 }
 
 maxMfunc = function(qp, m){
@@ -515,70 +473,52 @@ A2 = list(Y = Y, Tr = Tr, X = X,
 ##----------------------------------------------------------------------------##
 ## ANALYSIS 3: Spatial NCs
 ##----------------------------------------------------------------------------##
-data = data.frame(sapply(dataOriginal, as.numeric))
+data = dataOriginal
 
-## Need to create future exposures and prior outcomes variables for 
-## Use as negative controls
-data$DistantPM25 = rep(NA, nrow(data))
-data$DistantOzone = rep(NA, nrow(data))
-data$DistantNH4 = rep(NA, nrow(data))
-data$DistantSO4 = rep(NA, nrow(data))
-data$DistantOC = rep(NA, nrow(data))
-data$DistantEC = rep(NA, nrow(data))
-data$DistantNO3 = rep(NA, nrow(data))
+## Convert data to a data.table
+setDT(data)
+## Convert all columns to numeric (handles integers fine)
+data[, (names(data)) := lapply(.SD, as.numeric)]
 
-data$DistantMortality = rep(NA, nrow(data))
-data$DistantCOPD = rep(NA, nrow(data))
+## Convert ZIP code information to a numeric bin for matching
+data[, ZipBin := as.numeric(substr(zip, 1, nchar(as.character(zip)) - 4))]
+data[is.na(ZipBin), ZipBin := 0] # Handle any NAs which might have been introduced
 
-uniqueZips = unique(data$zip)
-uniqueYears = unique(data$year)
+## New columns for distant exposure and outcome variables
+data[, `:=` (
+  DistantPM25 = NA_real_,
+  DistantOzone = NA_real_,
+  DistantMortality = NA_real_,
+  DistantCOPD = NA_real_
+)]
 
-zipBins = substr(data$zip, 1, nchar(data$zip) - 4)
-zipBins = as.numeric(replace(zipBins, zipBins == "", "0"))
-#DistantzipBins = as.numeric(zipBins) + 5
-#DistantzipBins = substr(DistantzipBins,
-#                        nchar(DistantzipBins),
-#                        nchar(DistantzipBins))
+## Calculate Distant ZipBins
+data[, DistantZipBin := fifelse(ZipBin >= 5, ZipBin - 5, ZipBin + 5)]
 
-set.seed(325)
-for (tempZip in uniqueZips) {
-  
-  ZipBinCurrent = substr(tempZip, 1, nchar(tempZip) - 4)
-  ZipBinCurrent = as.numeric(replace(ZipBinCurrent, ZipBinCurrent == "", "0"))
-  ZipBinDistant = ifelse(ZipBinCurrent >= 5, ZipBinCurrent - 5, ZipBinCurrent + 5)
-  wDistantCandidate = which(ZipBinDistant == zipBins)
-  wDistantRd = sample(wDistantCandidate, 1)
-  
-  for (tempYear in uniqueYears) {
-    
-    #dataZipBin = substr(data$zip, 1, nchar(data$zip) - 4)
-    #dataZipBin = as.numeric(replace(dataZipBin, dataZipBin == "", "0"))
-    wCurrent = which(data$zip == tempZip &
-                       data$year == tempYear)
-    wDistant = which(data$zip == data$zip[wDistantRd] &
-                       data$year == tempYear)
-    #print(c(tempZip, tempYear, data$zip[wDistantRd]))
-    #print(c(tempZip, tempYear, data$copd_rate[wCurrent], data$copd_rate[wDistant]))
-    
-    ## only proceed if each of these is in the data set
-    if (length(wCurrent) == 1 &
-        length(wDistant) == 1) {
-      
-      data$DistantMortality[wCurrent] = data$death_rate[wDistant]
-      data$DistantCOPD[wCurrent] = data$copd_rate[wDistant]
-      
-      data$DistantEC[wCurrent] = data$ec[wDistant]
-      data$DistantOzone[wCurrent] = data$ozone[wDistant]
-      data$DistantOC[wCurrent] = data$oc[wDistant]
-      data$DistantNH4[wCurrent] = data$nh4[wDistant]
-      data$DistantSO4[wCurrent] = data$so4[wDistant]
-      data$DistantNO3[wCurrent] = data$no3[wDistant]
-      data$DistantPM25[wCurrent] = data$pm25[wDistant]
-    }
-  }
-}
-#View(finalData[,c("zip","year","copd_rate","DistantCOPD")])
+## Perform a self-join to find potential distant matches
+distant_matches <- data[data, on = .(ZipBin = DistantZipBin, year),
+                        .(zip, year, zip_distant = i.zip,
+                          pm25_distant = i.pm25, ozone_distant = i.ozone,
+                          death_rate_distant = i.death_rate,
+                          copd_rate_distant = i.copd_rate),
+                        allow.cartesian = TRUE, nomatch = 0L]
 
+## Randomly select one distant zip for each (zip, year)
+set.seed(325) # Set random seed for reproducibility 
+distant_selected <- distant_matches[, .SD[sample(.N, 1)], by = .(zip, year)]
+
+## Update data with the randomly selected distant values
+data[distant_selected, on = .(zip, year), `:=` (
+  DistantPM25 = pm25_distant,
+  DistantOzone = ozone_distant,
+  DistantMortality = death_rate_distant,
+  DistantCOPD = copd_rate_distant
+)]
+
+## Clean up temporary columns if they are no longer needed
+data[, `:=` (ZipBin = NULL, DistantZipBin = NULL)]
+
+## Remove rows that have NAs for variables of interest
 variablesOfInterest = c("zip",
                         "year",
                         "mean_bmi",
@@ -614,20 +554,14 @@ variablesOfInterest = c("zip",
                         "hypert_rate",
                         "DistantPM25",
                         "DistantOzone",
-                        "DistantNH4",
-                        "DistantSO4",
-                        "DistantOC",
-                        "DistantEC",
-                        "DistantNO3",
                         "DistantMortality",
                         "DistantCOPD")
 
-## Remove NAs
-wNotNA = which(complete.cases(data[, variablesOfInterest]) == TRUE)
 
 ## Store data frame without NAs
-finalData = data[wNotNA,]
-finalData = t(data.frame(do.call(rbind, finalData))) # convert list to dataframe
+finalData = na.omit(data, cols = variablesOfInterest)
+setDT(finalData)
+
 
 ## Now create variables needed for our analysis
 Y = finalData[,c("death_rate",
@@ -677,9 +611,9 @@ t2[[1]] = c(apply(Tr[,1:7], 2, quantile, 0.25), apply(Tr[,8:9], 2, median))
 
 for (tt in 2 : 8) {
   t1[[tt]] = apply(Tr, 2, median)
-  t1[[tt]][tt-1] = quantile(Tr[,tt-1], 0.75)
+  t1[[tt]][tt-1] = quantile(Tr[,c(tt-1)], 0.75)
   t2[[tt]] = apply(Tr, 2, median)
-  t2[[tt]][tt-1] = quantile(Tr[,tt-1], 0.25)
+  t2[[tt]][tt-1] = quantile(Tr[,c(tt-1)], 0.25)
 }
 
 ## Negative control outcomes
@@ -697,8 +631,8 @@ t1NC[[1]] = t(matrix(rep(apply(Tr, 2, median), 2), ncol=2))
 t2NC[[1]] = t(matrix(rep(apply(Tr, 2, median), 2), ncol=2))
 
 for (tt in 8 : 9) {
-  t1NC[[1]][tt-7,tt] = quantile(Tr[,tt], 0.75)
-  t2NC[[1]][tt-7,tt] = quantile(Tr[,tt], 0.25)
+  t1NC[[1]][tt-7,tt] = quantile(Tr[,c(tt)], 0.75)
+  t2NC[[1]][tt-7,tt] = quantile(Tr[,c(tt)], 0.25)
 }
 
 ## Now use current exposures with prior outcomes
@@ -706,16 +640,16 @@ t1NC[[2]] = t(matrix(rep(apply(Tr, 2, median), 7), ncol=7))
 t2NC[[2]] = t(matrix(rep(apply(Tr, 2, median), 7), ncol=7))
 
 for (tt in 1 : 7) {
-  t1NC[[2]][tt,tt] = quantile(Tr[,tt], 0.75)
-  t2NC[[2]][tt,tt] = quantile(Tr[,tt], 0.25)
+  t1NC[[2]][tt,tt] = quantile(Tr[,c(tt)], 0.75)
+  t2NC[[2]][tt,tt] = quantile(Tr[,c(tt)], 0.25)
 }
 
 t1NC[[3]] = t(matrix(rep(apply(Tr, 2, median), 7), ncol=7))
 t2NC[[3]] = t(matrix(rep(apply(Tr, 2, median), 7), ncol=7))
 
 for (tt in 1 : 7) {
-  t1NC[[3]][tt,tt] = quantile(Tr[,tt], 0.75)
-  t2NC[[3]][tt,tt] = quantile(Tr[,tt], 0.25)
+  t1NC[[3]][tt,tt] = quantile(Tr[,c(tt)], 0.75)
+  t2NC[[3]][tt,tt] = quantile(Tr[,c(tt)], 0.25)
 }
 
 maxMfunc = function(qp, m){
@@ -733,18 +667,73 @@ A3 = list(Y = Y, Tr = Tr, X = X,
           t1NC = t1NC, t2NC = t2NC, b = b,
           maxM = m)
 
+##==========================================================================##
+## Four ANALYSES
+##==========================================================================##
 source("MainFunctions.R")
-system.time(
-  testALL <- wrapFunc(SettingList = list(ANALYSIS0 = A0,
-                                         ANALYSIS1 = A1,
-                                         ANALYSIS2 = A2,
-                                         ANALYSIS3 = A3,
-                                         scaleData = TRUE,
-                                         nB = 50))
-)
+
+## ANALYSES 0: Original setting
+cat("ANALYSIS0","\n")
+A0 = SettingList[["ANALYSIS0"]]
+test0 = multiFunc(Y=A0$Y, 
+                  Tr=A0$Tr, 
+                  X=A0$X, 
+                  b=A0$b, 
+                  t1=A0$t1, 
+                  t2=A0$t2, 
+                  t1NC=A0$t1NC, 
+                  t2NC=A0$t2NC,
+                  maxM = A0$m,
+                  scaleData = TRUE,
+                  nB = 50)
+
+## ANALYSIS 1: ANALYSIS 0 but No NCEs, only keeping NCOs
+cat("ANALYSIS1","\n")
+A1 = SettingList[["ANALYSIS1"]]
+test1 = multiFunc(Y=A1$Y, 
+                  Tr=A1$Tr, 
+                  X=A1$X, 
+                  b=A1$b, 
+                  t1=A1$t1, 
+                  t2=A1$t2, 
+                  t1NC=A1$t1NC, 
+                  t2NC=A1$t2NC,
+                  maxM = A1$m,
+                  scaleData = TRUE,
+                  nB = 50)
+
+## ANALYSIS 2: ANALYSIS 0 but 3 years ahead and back in time
+cat("ANALYSIS2","\n")
+A2 = SettingList[["ANALYSIS2"]]
+test2 = multiFunc(Y=A2$Y, 
+                  Tr=A2$Tr, 
+                  X=A2$X, 
+                  b=A2$b, 
+                  t1=A2$t1, 
+                  t2=A2$t2, 
+                  t1NC=A2$t1NC, 
+                  t2NC=A2$t2NC,
+                  maxM = A2$m,
+                  scaleData = TRUE,
+                  nB = 50)
+
+## ANALYSIS 3: Spatial NCs
+cat("ANALYSIS3","\n")
+A3 = SettingList[["ANALYSIS3"]]
+test3 = multiFunc(Y=A3$Y, 
+                  Tr=A3$Tr, 
+                  X=A3$X, 
+                  b=A3$b, 
+                  t1=A3$t1, 
+                  t2=A3$t2, 
+                  t1NC=A3$t1NC, 
+                  t2NC=A3$t2NC,
+                  maxM = A3$m,
+                  scaleData = TRUE,
+                  nB = 50)
 
 if(args$fake){
-  save(testALL, file="data/output/fake_OutputSaved.dat")
+  save(test1, test2, test3, test4, file="data/output/fake_OutputSaved.dat")
 } else {
-  save(testALL, file="data/output/OutputSaved.dat")
+  save(test1, test2, test3, test4, file="data/output/OutputSaved.dat")
 }

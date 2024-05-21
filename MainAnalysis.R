@@ -345,10 +345,12 @@ A1 = list(Y = Y, Tr = Tr, X = X,
 ##==========================================================================##
 source("MainFunctions.R")
 
+
+
 if(args$analysis == "test0"){
   ## ANALYSES 0: Original setting
   cat("ANALYSIS0","\n")
-  A0 = SettingList[["ANALYSIS0"]]
+  #A0 = SettingList[["ANALYSIS0"]]
   test = multiFunc(Y=A0$Y, 
                    Tr=A0$Tr, 
                    X=A0$X, 
@@ -363,7 +365,7 @@ if(args$analysis == "test0"){
 } else if(args$analysis == "test1"){
   ## ANALYSIS 1: ANALYSIS 0 but No NCEs, only keeping NCOs
   cat("ANALYSIS1","\n")
-  A1 = SettingList[["ANALYSIS1"]]
+  #A1 = SettingList[["ANALYSIS1"]]
   test = multiFunc(Y=A1$Y, 
                    Tr=A1$Tr, 
                    X=A1$X, 

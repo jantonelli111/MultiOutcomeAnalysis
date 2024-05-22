@@ -1,5 +1,5 @@
 # Our main function
-multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, scaleData = FALSE, nB = 100){
+multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, nB = 50){
   
   # Convert to data.table if not already
   Y = as.data.table(Y)
@@ -14,19 +14,13 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, scaleData = FALSE, 
   # Check no. of NC outcomes
   J = ncol(b)
   
-  # Scale data
-  if (scaleData) {
-    Tr[] = lapply(Tr, scale, center = FALSE, scale = TRUE)
-    Y[] = lapply(Y, scale, center = FALSE, scale = TRUE)
-  }
-  
   # Setup for matrix of estimation results
   Mest = matrix(NA, 2, 8,
-                 dimnames = list(c("Tr", "Y"),
-                                 c("vss.comp1", "vss.comp2",
-                                   "MAP", "BIC", "adjBIC",
-                                   "parallel.fa", "parallel.pc",
-                                   "eigen")))
+                dimnames = list(c("Tr", "Y"),
+                                c("vss.comp1", "vss.comp2",
+                                  "MAP", "BIC", "adjBIC",
+                                  "parallel.fa", "parallel.pc",
+                                  "eigen")))
   
   # Modeling and residual calculation
   naivef = earth::earth(x = X, y = Tr)
@@ -35,11 +29,11 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, scaleData = FALSE, 
   for(gMod in 1:2){
     
     if(gMod == 1){  # gLinear
-      naiveg = lm(as.matrix(Y) ~ as.matrix(Tr) + as.matrix(X))
+      naiveg = lm(as.matrix(Y) ~ ., data = cbind(Tr, X))
       YResidual = Y - data.table(predict(naiveg, newdata = cbind(Tr, X)))
     } else if(gMod == 2){  # gNonLinear
-      naiveg = earth::earth(x = cbind(Tr, X), y = Y)
-      YResidual = Y - data.table(predict(naiveg, newdata = cbind(Tr, X)))
+      naiveg = earth::earth(x = cbind(Tr, X), y = Y) #earth::earth(as.matrix(Y) ~ ., data = cbind(Tr, X))
+      YResidual = Y - data.table(predict(naiveg)) #Y - data.table(predict(naiveg, newdata = cbind(Tr, X)))
     }
     
     ## Store residual densities
@@ -131,10 +125,19 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, scaleData = FALSE, 
         t1_jj = t1[[jj]]
         t2_jj = t2[[jj]]
         mu_u.deltatx.hat[[jj]] = coef_mu_u.tx.hat %*% (t1_jj - t2_jj)
-        G1 = predict(naiveg, as.data.frame(cbind(matrix(t1_jj, nrow = N, ncol = P, byrow = TRUE), X)))
-        G2 = predict(naiveg, as.data.frame(cbind(matrix(t2_jj, nrow = N, ncol = P, byrow = TRUE), X)))
+        G1data = as.data.frame(cbind(matrix(t1_jj, nrow = N, ncol = P, byrow = TRUE), X))
+        G2data = as.data.frame(cbind(matrix(t2_jj, nrow = N, ncol = P, byrow = TRUE), X))
+        colnames(G1data) = colnames(G2data) = colnames(cbind(Tr, X))
+        #G1data = data.frame(Tr = I(matrix(t1_jj, nrow = N, ncol = P, byrow = TRUE)), X = I(as.matrix(X)))
+        #G2data = data.frame(Tr = I(matrix(t2_jj, nrow = N, ncol = P, byrow = TRUE)), X = I(as.matrix(X)))
+        G1 = predict(naiveg, newdata = G1data)
+        G2 = predict(naiveg, newdata = G2data)
         G[[jj]] = as.numeric(colMeans(G1 - G2))
       }
+      #jj<-1
+      #head(G1data[,1:7]); head(G2data[,1:7]); head(cbind(Tr[,1:7]))
+      #head(G1); head(G2); head(predict(naiveg))
+      #colMeans(G1); colMeans(G2); colMeans(predict(naiveg))
       
       #--------------------------------------------------------------------------#
       # Negative Controls
@@ -154,6 +157,7 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, scaleData = FALSE, 
                                            nrow = N, ncol = P, byrow = TRUE), X)
           t2NC_cj_data = data.table(matrix(t2NC[[jj]][cj, ],
                                            nrow = N, ncol = P, byrow = TRUE), X)
+          colnames(t1NC_cj_data) = colnames(t2NC_cj_data) = colnames(cbind(Tr, X))
           tmp1 = colMeans(predict(naiveg, newdata = t1NC_cj_data))
           tmp2 = colMeans(predict(naiveg, newdata = t2NC_cj_data))
           Ghat_j = cbind(Ghat_j, tmp1 - tmp2)
@@ -182,7 +186,7 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, scaleData = FALSE, 
       ## Measuring uncertainty of PATE under NUC
       Gboot[[mm]] = array(NA, dim = c(nB, Q, length(t1)))
       
-      system.time(for(bt in 1:nB){
+      for(bt in 1:nB){
         
         # Generate bootstrapped data
         set.seed(bt)
@@ -192,22 +196,23 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, scaleData = FALSE, 
         Xbt = X[indB, ]
         
         if(gMod == 1){ # gLinear
-          naiveg = lm(as.matrix(Ybt) ~ as.matrix(Trbt) + as.matrix(Xbt))
+          naivegbt = lm(as.matrix(Ybt) ~ ., data = cbind(Trbt, Xbt))
           #YResidual = Y - predict(naiveg)
         } else if(gMod == 2){ # gNonLinear
-          naiveg = earth::earth(x = cbind(Trbt, Xbt), y = Ybt)
+          naivegbt = earth::earth(x = cbind(Trbt, Xbt), y = Ybt)
           #YResidual = Y - predict(naiveg)
         }
         
         for(jj in 1:length(t1)){
           t1_jj_data = data.table(matrix(t1[[jj]], nrow = N, ncol = P, byrow = TRUE), Xbt)
           t2_jj_data = data.table(matrix(t2[[jj]], nrow = N, ncol = P, byrow = TRUE), Xbt)
-          G1 = predict(naiveg, newdata = t1_jj_data)
-          G2 = predict(naiveg, newdata = t2_jj_data)
+          colnames(t1_jj_data) = colnames(t2_jj_data) = colnames(cbind(Trbt, Xbt))
+          G1 = predict(naivegbt, newdata = t1_jj_data)
+          G2 = predict(naivegbt, newdata = t2_jj_data)
           Gboot[[mm]][bt, , jj] = as.numeric(colMeans(G1 - G2))
         }
-      })
-
+      }
+      
       if(gMod == 1){
         gLinear = list(Estimates = saveResult,
                        Mdetermination = list(Mest = Mest, Mpval = Mpval,
@@ -221,15 +226,15 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, scaleData = FALSE, 
                        Gboot = Gboot)
       } else if(gMod == 2){
         gNonLinear = list(Estimates = saveResult,
-                       Mdetermination = list(Mest = Mest, Mpval = Mpval,
-                                             TrScree = TrScree, YScree = YScree),
-                       Densities = list(densTrlist = densTrlist,
-                                        densYlist = densYlist),
-                       Corr = list(CorrTr = cor(Tr), CorrTrResidual = cor(TrResidual),
-                                   CorrY = cor(Y), CorrYResidual = cor(YResidual)),
-                       Gboot = Gboot)
+                          Mdetermination = list(Mest = Mest, Mpval = Mpval,
+                                                TrScree = TrScree, YScree = YScree),
+                          Densities = list(densTrlist = densTrlist,
+                                           densYlist = densYlist),
+                          Corr = list(CorrTr = cor(Tr), CorrTrResidual = cor(TrResidual),
+                                      CorrY = cor(Y), CorrYResidual = cor(YResidual)),
+                          Gboot = Gboot)
       }
-
+      
     }
     
   }
@@ -239,7 +244,7 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, scaleData = FALSE, 
                                     b = b, t1NC = t1NC, t2NC = t2NC),
                     gLinear = gLinear,
                     gNonLinear = gNonLinear)
-
+  
   return(allResults)
   
 }

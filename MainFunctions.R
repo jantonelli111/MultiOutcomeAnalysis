@@ -24,7 +24,7 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, nB = 50){
   
   # Modeling and residual calculation
   naivef = earth::earth(x = X, y = Tr)
-  TrResidual = Tr - predict(naivef) #Tr -  X[, predict(naivef, newdata = .SD), .SDcols = names(Tr)]
+  TrResidual = Tr - predict(naivef)
   
   for(gMod in 1:2){
     
@@ -32,8 +32,8 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, nB = 50){
       naiveg = lm(as.matrix(Y) ~ ., data = cbind(Tr, X))
       YResidual = Y - data.table(predict(naiveg, newdata = cbind(Tr, X)))
     } else if(gMod == 2){  # gNonLinear
-      naiveg = earth::earth(x = cbind(Tr, X), y = Y) #earth::earth(as.matrix(Y) ~ ., data = cbind(Tr, X))
-      YResidual = Y - data.table(predict(naiveg)) #Y - data.table(predict(naiveg, newdata = cbind(Tr, X)))
+      naiveg = earth::earth(x = cbind(Tr, X), y = Y)
+      YResidual = Y - data.table(predict(naiveg))
     }
     
     ## Store residual densities
@@ -100,8 +100,17 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, nB = 50){
                               nstart=100, lower = 0.01)
       B.hat = sqrt(diag(var(TrResidual))) * TrResidualFA$loadings[]
       FATrRes = TrResidualFA$uniquenesses * diag(var(TrResidual))
-      sigma2_t.xu.hat = mean(FATrRes)
-      Sigma_t.x.hat = B.hat %*% t(B.hat) + diag(sigma2_t.xu.hat, P)
+      #sigma2_t.xu.hat = mean(FATrRes)
+      #Sigma_t.x.hat = B.hat %*% t(B.hat) + diag(sigma2_t.xu.hat, P)
+      Sigma_t.x.hat = B.hat %*% t(B.hat) + diag(FATrRes)
+      
+      TrResidualFARes = list(loadings = TrResidualFA$loadings[],
+                             uniquenesses = TrResidualFA$uniquenesses,
+                             correlation = TrResidualFA$correlation,
+                             criteria = TrResidualFA$criteria,
+                             rotmat = TrResidualFA$rotmat,
+                             STATISTIC = TrResidualFA$STATISTIC,
+                             PVAL = TrResidualFA$PVAL)
       
       coef_mu_u.tx.hat = t(B.hat) %*% solve(Sigma_t.x.hat)
       #mu_u.deltatx.hat <- coef_mu_u.tx.hat %*% (t1 - t2)
@@ -113,11 +122,17 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, nB = 50){
                              nstart=100, lower = 0.01)
       Gamma.hat = sqrt(diag(var(YResidual))) * YResidualFA$loadings[]
       FAYRes = YResidualFA$uniquenesses * diag(var(YResidual))
-      sigma2_y.txu.hat = mean(FAYRes)
-      Sigma_y.tx.hat = Gamma.hat %*% t(Gamma.hat) + diag(sigma2_y.txu.hat, Q)
+      #sigma2_y.txu.hat = mean(FAYRes)
+      #Sigma_y.tx.hat = Gamma.hat %*% t(Gamma.hat) + diag(sigma2_y.txu.hat, Q)
+      Sigma_y.tx.hat = Gamma.hat %*% t(Gamma.hat) + diag(FAYRes)
       
-      #G = as.numeric(colMeans(predict(naiveg, cbind(t(replicate(N, t1)), X)) -
-      #                          predict(naiveg, cbind(t(replicate(N, t2)), X))))
+      YResidualFARes = list(loadings = YResidualFA$loadings[],
+                            uniquenesses = YResidualFA$uniquenesses,
+                            correlation = YResidualFA$correlation,
+                            criteria = YResidualFA$criteria,
+                            rotmat = YResidualFA$rotmat,
+                            STATISTIC = YResidualFA$STATISTIC,
+                            PVAL = YResidualFA$PVAL)
       
       mu_u.deltatx.hat = list()
       G = list()
@@ -128,48 +143,47 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, nB = 50){
         G1data = as.data.frame(cbind(matrix(t1_jj, nrow = N, ncol = P, byrow = TRUE), X))
         G2data = as.data.frame(cbind(matrix(t2_jj, nrow = N, ncol = P, byrow = TRUE), X))
         colnames(G1data) = colnames(G2data) = colnames(cbind(Tr, X))
-        #G1data = data.frame(Tr = I(matrix(t1_jj, nrow = N, ncol = P, byrow = TRUE)), X = I(as.matrix(X)))
-        #G2data = data.frame(Tr = I(matrix(t2_jj, nrow = N, ncol = P, byrow = TRUE)), X = I(as.matrix(X)))
         G1 = predict(naiveg, newdata = G1data)
         G2 = predict(naiveg, newdata = G2data)
         G[[jj]] = as.numeric(colMeans(G1 - G2))
       }
-      #jj<-1
-      #head(G1data[,1:7]); head(G2data[,1:7]); head(cbind(Tr[,1:7]))
-      #head(G1); head(G2); head(predict(naiveg))
-      #colMeans(G1); colMeans(G2); colMeans(predict(naiveg))
       
       #--------------------------------------------------------------------------#
       # Negative Controls
       #--------------------------------------------------------------------------#
-      #D = NULL
-      D = matrix(NA, J, M)
-      GhatList = list()
-      MncList = list()
-      MncInvList = list()
-      for(jj in 1:J){
-        # For jj-th NC outcome
-        Ghat_j = Mnc_j = NULL
-        for(cj in seq_len(nrow(t1NC[[jj]]))){
-          #tmp1 = colMeans(predict(naiveg, cbind(t(replicate(N, t1NC_cj)), X)))
-          #tmp2 = colMeans(predict(naiveg, cbind(t(replicate(N, t2NC_cj)), X)))
-          t1NC_cj_data = data.table(matrix(t1NC[[jj]][cj, ],
-                                           nrow = N, ncol = P, byrow = TRUE), X)
-          t2NC_cj_data = data.table(matrix(t2NC[[jj]][cj, ],
-                                           nrow = N, ncol = P, byrow = TRUE), X)
-          colnames(t1NC_cj_data) = colnames(t2NC_cj_data) = colnames(cbind(Tr, X))
-          tmp1 = colMeans(predict(naiveg, newdata = t1NC_cj_data))
-          tmp2 = colMeans(predict(naiveg, newdata = t2NC_cj_data))
-          Ghat_j = cbind(Ghat_j, tmp1 - tmp2)
-          Mnc_j = cbind(Mnc_j, Sigma_u.tx.hat_chol %*%
-                          coef_mu_u.tx.hat %*%
-                          (t1NC[[jj]][cj, ] - t2NC[[jj]][cj, ]))
+      if(is.null(b)){
+        
+        D = GhatList = MncList = MncInvList = NULL
+        
+      } else {
+        
+        #D = NULL
+        D = matrix(NA, J, M)
+        GhatList = list()
+        MncList = list()
+        MncInvList = list()
+        for(jj in 1:J){
+          # For jj-th NC outcome
+          Ghat_j = Mnc_j = NULL
+          for(cj in seq_len(nrow(t1NC[[jj]]))){
+            t1NC_cj_data = data.table(matrix(t1NC[[jj]][cj, ],
+                                             nrow = N, ncol = P, byrow = TRUE), X)
+            t2NC_cj_data = data.table(matrix(t2NC[[jj]][cj, ],
+                                             nrow = N, ncol = P, byrow = TRUE), X)
+            colnames(t1NC_cj_data) = colnames(t2NC_cj_data) = colnames(cbind(Tr, X))
+            tmp1 = colMeans(predict(naiveg, newdata = t1NC_cj_data))
+            tmp2 = colMeans(predict(naiveg, newdata = t2NC_cj_data))
+            Ghat_j = cbind(Ghat_j, tmp1 - tmp2)
+            Mnc_j = cbind(Mnc_j, Sigma_u.tx.hat_chol %*%
+                            coef_mu_u.tx.hat %*%
+                            (t1NC[[jj]][cj, ] - t2NC[[jj]][cj, ]))
+          }
+          D[jj, ] = t(b[, jj, drop = FALSE]) %*% Ghat_j %*% MASS::ginv(Mnc_j)
+          GhatList[[jj]] = Ghat_j
+          MncList[[jj]] = Mnc_j
+          MncInvList[[jj]] = MASS::ginv(Mnc_j)
         }
-        #D = rbind(D, D_j)
-        D[jj, ] = t(b[, jj, drop = FALSE]) %*% Ghat_j %*% MASS::ginv(Mnc_j)
-        GhatList[[jj]] = Ghat_j
-        MncList[[jj]] = Mnc_j
-        MncInvList[[jj]] = MASS::ginv(Mnc_j)
+        
       }
       
       saveResult[[mm]] = list(B.hat = B.hat, Gamma.hat = Gamma.hat,
@@ -179,6 +193,8 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, nB = 50){
                               Sigma_t.x.hat = Sigma_t.x.hat,
                               Sigma_y.tx.hat = Sigma_y.tx.hat,
                               FATrRes = FATrRes, FAYRes = FAYRes,
+                              TrResidualFARes = TrResidualFARes,
+                              YResidualFARes = YResidualFARes,
                               G = G,
                               D = D, GhatList = GhatList,
                               MncList = MncList, MncInvList = MncInvList)
@@ -197,15 +213,13 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, nB = 50){
         
         if(gMod == 1){ # gLinear
           naivegbt = lm(as.matrix(Ybt) ~ ., data = cbind(Trbt, Xbt))
-          #YResidual = Y - predict(naiveg)
         } else if(gMod == 2){ # gNonLinear
           naivegbt = earth::earth(x = cbind(Trbt, Xbt), y = Ybt)
-          #YResidual = Y - predict(naiveg)
         }
         
         for(jj in 1:length(t1)){
-          t1_jj_data = data.table(matrix(t1[[jj]], nrow = N, ncol = P, byrow = TRUE), Xbt)
-          t2_jj_data = data.table(matrix(t2[[jj]], nrow = N, ncol = P, byrow = TRUE), Xbt)
+          t1_jj_data = as.data.frame(cbind(matrix(t1[[jj]], nrow = N, ncol = P, byrow = TRUE), Xbt))
+          t2_jj_data = as.data.frame(cbind(matrix(t2[[jj]], nrow = N, ncol = P, byrow = TRUE), Xbt))
           colnames(t1_jj_data) = colnames(t2_jj_data) = colnames(cbind(Trbt, Xbt))
           G1 = predict(naivegbt, newdata = t1_jj_data)
           G2 = predict(naivegbt, newdata = t2_jj_data)
@@ -219,8 +233,10 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, nB = 50){
                                              TrScree = TrScree, YScree = YScree),
                        Densities = list(densTrlist = densTrlist,
                                         densYlist = densYlist),
-                       Corr = list(CorrTr = cor(Tr), CorrTrResidual = cor(TrResidual),
-                                   CorrY = cor(Y), CorrYResidual = cor(YResidual)),
+                       Cov = list(CorrTr = cor(Tr), CorrTrResidual = cor(TrResidual),
+                                  CorrY = cor(Y), CorrYResidual = cor(YResidual),
+                                  CovTr = cov(Tr), CovTrResidual = cov(TrResidual),
+                                  CovY = cov(Y), CovYResidual = cov(YResidual)),
                        gSummary = summary(naiveg),
                        gvcov = vcov(naiveg),
                        Gboot = Gboot)
@@ -230,8 +246,10 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, nB = 50){
                                                 TrScree = TrScree, YScree = YScree),
                           Densities = list(densTrlist = densTrlist,
                                            densYlist = densYlist),
-                          Corr = list(CorrTr = cor(Tr), CorrTrResidual = cor(TrResidual),
-                                      CorrY = cor(Y), CorrYResidual = cor(YResidual)),
+                          Cov = list(CorrTr = cor(Tr), CorrTrResidual = cor(TrResidual),
+                                     CorrY = cor(Y), CorrYResidual = cor(YResidual),
+                                     CovTr = cov(Tr), CovTrResidual = cov(TrResidual),
+                                     CovY = cov(Y), CovYResidual = cov(YResidual)),
                           Gboot = Gboot)
       }
       

@@ -50,34 +50,27 @@ data[, (names(data)) := lapply(.SD, as.numeric)]
 
 ## Need to create future exposures and prior outcomes variables for 
 ## Use as negative controls
-newCols <- c("FuturePM25", "FutureOzone",
-             "PriorMortality", "PriorAnemia", "PriorCOPD")
-data[, (newCols) := .(rep(NA_real_, .N), rep(NA_real_, .N),
-                      rep(NA_real_, .N), rep(NA_real_, .N), rep(NA_real_, .N))]
+newCols <- c("PriorCOPD")
+data[, (newCols) := .(rep(NA_real_, .N))]
 
-## Create shifts in year columns for past and future matching
-data[, c("YearPlus1", "YearMinus1") := .(year + 1, year - 1)]
+## Create shifts in year columns for past  matching
+data[, c("YearPlus1") := .(year + 1)]
 
 ## Create a key for faster subsetting and joins
 setkey(data, zip, year)
 
 ## Join data with itself to fetch future and past values
 dataCurrent <- data[, .(zip, year = year,
-                        pm25 = pm25, ozone = ozone,
-                        death_rate = death_rate, anemia_rate = anemia_rate, copd_rate = copd_rate)]
-dataFuture <- data[, .(zip, year = YearMinus1,
-                       FuturePM25 = pm25, FutureOzone = ozone)]
+                        copd_rate = copd_rate)]
 dataPast <- data[, .(zip, year = YearPlus1,
-                     PriorMortality = death_rate, PriorAnemia = anemia_rate, PriorCOPD = copd_rate)]
+                     PriorCOPD = copd_rate)]
 
-## Merge future and past data into the original dataset by reference
-data[dataFuture, on = .(zip, year),
-     `:=` (FuturePM25 = i.FuturePM25, FutureOzone = i.FutureOzone)]
+## Merge \past data into the original dataset by reference\
 data[dataPast, on = .(zip, year),
-     `:=` (PriorMortality = i.PriorMortality, PriorAnemia = i.PriorAnemia, PriorCOPD = i.PriorCOPD)]
+     `:=` (PriorCOPD = i.PriorCOPD)]
 
 ## Clean up helper columns
-data[, `:=` (YearPlus1 = NULL, YearMinus1 = NULL)]
+data[, `:=` (YearPlus1 = NULL)]
 
 ## Remove rows that have NAs for variables of interest
 variablesOfInterest = c("zip",
@@ -113,10 +106,6 @@ variablesOfInterest = c("zip",
                         "lungCancer_rate",
                         "asthma_rate",
                         "hypert_rate",
-                        "FuturePM25",
-                        "FutureOzone",
-                        "PriorMortality",
-                        "PriorAnemia",
                         "PriorCOPD")
 
 
@@ -127,7 +116,7 @@ setDT(finalData)
 
 
 ##----------------------------------------------------------------------------##
-## ANALYSIS 0: Original setting
+## ANALYSIS 0: No NCEs, No NCOs
 ##----------------------------------------------------------------------------##
 ## Now create variables needed for our analysis
 Y = finalData[,c("death_rate",
@@ -137,122 +126,6 @@ Y = finalData[,c("death_rate",
                  "lungCancer_rate",
                  "asthma_rate",
                  "hypert_rate",
-                 "PriorMortality",
-                 "PriorAnemia",
-                 "PriorCOPD")]
-
-Tr = finalData[,c("pm25",
-                  "ozone",
-                  "ec",
-                  "nh4",
-                  "no3",
-                  "oc",
-                  "so4",
-                  "FuturePM25",
-                  "FutureOzone")]
-
-X = finalData[,c("year",
-                 "mean_bmi",
-                 "smoke_rate",
-                 "medhouseholdincome",
-                 "medianhousevalue",
-                 "poverty",
-                 "education",
-                 "pct_owner_occ",
-                 "summer_tmmx",
-                 "winter_tmmx",
-                 "summer_rmax",
-                 "winter_rmax",
-                 "female_pct",
-                 "dual_pct",
-                 "mean_age",
-                 "race_black_pct",
-                 "race_white_pct",
-                 "race_hispanic_pct")]
-
-## Scale data
-Tr[] = lapply(Tr, scale, center = FALSE, scale = TRUE)
-Y[] = lapply(Y, scale, center = FALSE, scale = TRUE)
-#head(Y[order(Y[,1]),])
-#head(Tr[order(Tr[,1]),])
-
-## estimand of interest
-t1 = list()
-t2 = list()
-t1[[1]] = c(apply(Tr[,1:7], 2, quantile, 0.75), apply(Tr[,8:9], 2, median))
-t2[[1]] = c(apply(Tr[,1:7], 2, quantile, 0.25), apply(Tr[,8:9], 2, median))
-
-for (tt in 2 : 8) {
-  t1[[tt]] = apply(Tr, 2, median)
-  t1[[tt]][tt-1] = apply(Tr[, .SD, .SDcols = c(tt-1)], 2, quantile, 0.75)
-  t2[[tt]] = apply(Tr, 2, median)
-  t2[[tt]][tt-1] = apply(Tr[, .SD, .SDcols = c(tt-1)], 2, quantile, 0.25)
-}
-
-## Negative control outcomes
-b = matrix(c(1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-             0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
-             0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
-             0, 0, 0, 0, 0, 0, 0, 0, 0, 1),
-           byrow = FALSE, nrow = ncol(Y))
-
-## Exposure contrasts for negative controls
-t1NC = list()
-t2NC = list()
-
-## First use future exposures as NC for current mortality
-t1NC[[1]] = t(matrix(rep(apply(Tr, 2, median), 2), ncol=2))
-t2NC[[1]] = t(matrix(rep(apply(Tr, 2, median), 2), ncol=2))
-
-for (tt in 8 : 9) {
-  t1NC[[1]][tt-7,tt] = apply(Tr[, .SD, .SDcols = c(tt)], 2, quantile, 0.75)
-  t2NC[[1]][tt-7,tt] = apply(Tr[, .SD, .SDcols = c(tt)], 2, quantile, 0.25)
-}
-
-## Now use current exposures with prior outcomes
-t1NC[[2]] = t(matrix(rep(apply(Tr, 2, median), 7), ncol=7))
-t2NC[[2]] = t(matrix(rep(apply(Tr, 2, median), 7), ncol=7))
-
-for (tt in 1 : 7) {
-  t1NC[[2]][tt,tt] = apply(Tr[, .SD, .SDcols = c(tt)], 2, quantile, 0.75)
-  t2NC[[2]][tt,tt] = apply(Tr[, .SD, .SDcols = c(tt)], 2, quantile, 0.25)
-}
-
-t1NC[[3]] = t1NC[[2]]
-t2NC[[3]] = t2NC[[2]]
-
-t1NC[[4]] = t1NC[[2]]
-t2NC[[4]] = t2NC[[2]]
-
-maxMfunc = function(qp, m){
-  (qp - m)^2 - qp - m
-}
-
-for(pq in 3:min(ncol(Y), ncol(Tr))){
-  m = 0
-  while(maxMfunc(pq, m) >= 0){m = m + 1}
-  m = m - 1
-}
-
-A0 = list(Y = Y, Tr = Tr, X = X,
-          t1 = t1, t2 = t2,
-          t1NC = t1NC, t2NC = t2NC, b = b,
-          maxM = m)
-
-
-##----------------------------------------------------------------------------##
-## ANALYSIS 1: No NCEs, only keeping NCOs
-##----------------------------------------------------------------------------##
-## Now create variables needed for our analysis
-Y = finalData[,c("death_rate",
-                 "anemia_rate",
-                 "copd_rate",
-                 "stroke_rate",
-                 "lungCancer_rate",
-                 "asthma_rate",
-                 "hypert_rate",
-                 "PriorMortality",
-                 "PriorAnemia",
                  "PriorCOPD")]
 
 Tr = finalData[,c("pm25",
@@ -283,8 +156,84 @@ X = finalData[,c("year",
                  "race_hispanic_pct")]
 
 ## Scale data
-Tr[] = lapply(Tr, scale, center = FALSE, scale = TRUE)
-Y[] = lapply(Y, scale, center = FALSE, scale = TRUE)
+Tr[] = lapply(Tr, scale, center = TRUE, scale = TRUE)
+Y[] = lapply(Y, scale, center = TRUE, scale = TRUE)
+
+## estimand of interest
+t1 = list()
+t2 = list()
+t1[[1]] = apply(Tr[,1:7], 2, quantile, 0.75)
+t2[[1]] = apply(Tr[,1:7], 2, quantile, 0.25)
+
+for (tt in 2 : 8) {
+  t1[[tt]] = apply(Tr, 2, median)
+  t1[[tt]][tt-1] = apply(Tr[, .SD, .SDcols = c(tt-1)], 2, quantile, 0.75)
+  t2[[tt]] = apply(Tr, 2, median)
+  t2[[tt]][tt-1] = apply(Tr[, .SD, .SDcols = c(tt-1)], 2, quantile, 0.25)
+}
+
+## No negative controls
+b = t1NC = t2NC = NULL
+
+maxMfunc = function(qp, m){
+  (qp - m)^2 - qp - m
+}
+
+for(pq in 3:min(ncol(Y), ncol(Tr))){
+  m = 0
+  while(maxMfunc(pq, m) >= 0){m = m + 1}
+  m = m - 1
+}
+
+A0 = list(Y = Y, Tr = Tr, X = X,
+          t1 = t1, t2 = t2,
+          t1NC = t1NC, t2NC = t2NC, b = b,
+          maxM = m)
+
+
+##----------------------------------------------------------------------------##
+## ANALYSIS 1: No NCEs, One NCO
+##----------------------------------------------------------------------------##
+## Now create variables needed for our analysis
+Y = finalData[,c("death_rate",
+                 "anemia_rate",
+                 "copd_rate",
+                 "stroke_rate",
+                 "lungCancer_rate",
+                 "asthma_rate",
+                 "hypert_rate",
+                 "PriorCOPD")]
+
+Tr = finalData[,c("pm25",
+                  "ozone",
+                  "ec",
+                  "nh4",
+                  "no3",
+                  "oc",
+                  "so4")]
+
+X = finalData[,c("year",
+                 "mean_bmi",
+                 "smoke_rate",
+                 "medhouseholdincome",
+                 "medianhousevalue",
+                 "poverty",
+                 "education",
+                 "pct_owner_occ",
+                 "summer_tmmx",
+                 "winter_tmmx",
+                 "summer_rmax",
+                 "winter_rmax",
+                 "female_pct",
+                 "dual_pct",
+                 "mean_age",
+                 "race_black_pct",
+                 "race_white_pct",
+                 "race_hispanic_pct")]
+
+## Scale data
+Tr[] = lapply(Tr, scale, center = TRUE, scale = TRUE)
+Y[] = lapply(Y, scale, center = TRUE, scale = TRUE)
 
 ## estimand of interest
 t1 = list()
@@ -300,9 +249,7 @@ for (tt in 2 : 8) {
 }
 
 ## Negative control outcomes
-b = matrix(c(0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
-             0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
-             0, 0, 0, 0, 0, 0, 0, 0, 0, 1),
+b = matrix(c(0, 0, 0, 0, 0, 0, 0, 1),
            byrow = FALSE, nrow = ncol(Y))
 
 ## Exposure contrasts for negative controls
@@ -317,12 +264,6 @@ for (tt in 1 : 7) {
   t1NC[[1]][tt,tt] = apply(Tr[, .SD, .SDcols = c(tt)], 2, quantile, 0.75)
   t2NC[[1]][tt,tt] = apply(Tr[, .SD, .SDcols = c(tt)], 2, quantile, 0.25)
 }
-
-t1NC[[2]] = t1NC[[1]]
-t2NC[[2]] = t2NC[[1]]
-
-t1NC[[3]] = t1NC[[1]]
-t2NC[[3]] = t2NC[[1]]
 
 maxMfunc = function(qp, m){
   (qp - m)^2 - qp - m

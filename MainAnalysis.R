@@ -89,7 +89,6 @@ variablesOfInterest = c("zip",
                         "pm25",
                         "ozone",
                         "ec",
-                        "nh4",
                         "no3",
                         "oc",
                         "so4",
@@ -105,7 +104,6 @@ variablesOfInterest = c("zip",
                         "stroke_rate",
                         "lungCancer_rate",
                         "asthma_rate",
-                        "hypert_rate",
                         "PriorCOPD")
 
 
@@ -124,14 +122,11 @@ Y = finalData[,c("death_rate",
                  "copd_rate",
                  "stroke_rate",
                  "lungCancer_rate",
-                 "asthma_rate",
-                 "hypert_rate",
-                 "PriorCOPD")]
+                 "asthma_rate")]
 
 Tr = finalData[,c("pm25",
                   "ozone",
                   "ec",
-                  "nh4",
                   "no3",
                   "oc",
                   "so4")]
@@ -201,13 +196,11 @@ Y = finalData[,c("death_rate",
                  "stroke_rate",
                  "lungCancer_rate",
                  "asthma_rate",
-                 "hypert_rate",
                  "PriorCOPD")]
 
 Tr = finalData[,c("pm25",
                   "ozone",
                   "ec",
-                  "nh4",
                   "no3",
                   "oc",
                   "so4")]

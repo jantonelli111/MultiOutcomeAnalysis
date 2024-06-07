@@ -157,8 +157,8 @@ Y[] = lapply(Y, scale, center = TRUE, scale = TRUE)
 ## estimand of interest
 t1 = list()
 t2 = list()
-t1[[1]] = apply(Tr[,1:7], 2, quantile, 0.75)
-t2[[1]] = apply(Tr[,1:7], 2, quantile, 0.25)
+t1[[1]] = apply(Tr[,1:6], 2, quantile, 0.75)
+t2[[1]] = apply(Tr[,1:6], 2, quantile, 0.25)
 
 for (tt in 2 : 8) {
   t1[[tt]] = apply(Tr, 2, median)
@@ -231,8 +231,8 @@ Y[] = lapply(Y, scale, center = TRUE, scale = TRUE)
 ## estimand of interest
 t1 = list()
 t2 = list()
-t1[[1]] = apply(Tr[,1:7], 2, quantile, 0.75)
-t2[[1]] = apply(Tr[,1:7], 2, quantile, 0.25)
+t1[[1]] = apply(Tr[,1:6], 2, quantile, 0.75)
+t2[[1]] = apply(Tr[,1:6], 2, quantile, 0.25)
 
 for (tt in 2 : 8) {
   t1[[tt]] = apply(Tr, 2, median)

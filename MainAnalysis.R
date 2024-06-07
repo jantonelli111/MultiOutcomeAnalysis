@@ -160,7 +160,7 @@ t2 = list()
 t1[[1]] = apply(Tr[,1:6], 2, quantile, 0.75)
 t2[[1]] = apply(Tr[,1:6], 2, quantile, 0.25)
 
-for (tt in 2 : 8) {
+for (tt in 2 : 7) {
   t1[[tt]] = apply(Tr, 2, median)
   t1[[tt]][tt-1] = apply(Tr[, .SD, .SDcols = c(tt-1)], 2, quantile, 0.75)
   t2[[tt]] = apply(Tr, 2, median)
@@ -234,7 +234,7 @@ t2 = list()
 t1[[1]] = apply(Tr[,1:6], 2, quantile, 0.75)
 t2[[1]] = apply(Tr[,1:6], 2, quantile, 0.25)
 
-for (tt in 2 : 8) {
+for (tt in 2 : 7) {
   t1[[tt]] = apply(Tr, 2, median)
   t1[[tt]][tt-1] = apply(Tr[, .SD, .SDcols = c(tt-1)], 2, quantile, 0.75)
   t2[[tt]] = apply(Tr, 2, median)
@@ -242,7 +242,7 @@ for (tt in 2 : 8) {
 }
 
 ## Negative control outcomes
-b = matrix(c(0, 0, 0, 0, 0, 0, 0, 1),
+b = matrix(c(0, 0, 0, 0, 0, 0, 1),
            byrow = FALSE, nrow = ncol(Y))
 
 ## Exposure contrasts for negative controls
@@ -250,10 +250,10 @@ t1NC = list()
 t2NC = list()
 
 ## Now use current exposures with prior outcomes
-t1NC[[1]] = t(matrix(rep(apply(Tr, 2, median), 7), ncol=7))
-t2NC[[1]] = t(matrix(rep(apply(Tr, 2, median), 7), ncol=7))
+t1NC[[1]] = t(matrix(rep(apply(Tr, 2, median), 6), ncol=6))
+t2NC[[1]] = t(matrix(rep(apply(Tr, 2, median), 6), ncol=6))
 
-for (tt in 1 : 7) {
+for (tt in 1 : 6) {
   t1NC[[1]][tt,tt] = apply(Tr[, .SD, .SDcols = c(tt)], 2, quantile, 0.75)
   t2NC[[1]][tt,tt] = apply(Tr[, .SD, .SDcols = c(tt)], 2, quantile, 0.25)
 }

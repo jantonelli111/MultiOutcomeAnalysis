@@ -64,10 +64,18 @@ multiFunc <- function(Y, Tr, X, b, t1, t2, t1NC, t2NC, maxM, nB = 50){
     # to capture the full dimensionality of data.
     Mpval = matrix(NA, 2, maxM, dimnames = list(c("Tr", "Y"), as.character(1:maxM)))
     for(mm in 1:maxM){
-      Mpval[1, mm] = as.numeric(factanal(TrResidual, factors = mm, 
-                                         nstart=100, lower = 0.01)$PVAL)
-      Mpval[2, mm] = as.numeric(factanal(YResidual, factors = mm, 
-                                         nstart=100, lower = 0.01)$PVAL)
+      TrResPVAL = factanal(TrResidual, factors = mm, nstart=100, lower = 0.01)$PVAL
+      YResPVAL = factanal(YResidual, factors = mm, nstart=100, lower = 0.01)$PVAL
+      if(!is.null(TrResPVAL)){
+        Mpval[1, mm] = as.numeric(TrResPVAL)
+      } else {
+        Mpval[1, mm] = NA
+      }
+      if(!is.null(YResPVAL)){
+        Mpval[2, mm] = as.numeric(YResPVAL)
+      } else {
+        Mpval[2, mm] = NA
+      }
     }
     
     # For screeplots
